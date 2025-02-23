@@ -11,22 +11,7 @@ from yflow.layers.lstm import YSTM
 from yflow.layers.dense import Dense
 from yflow.losses.mse import MSELoss
 from yflow.optimizers.adam import Adam
-
-# More robust GPU import
-try:
-    from yflow.utils import is_gpu_available, get_device_info
-except ImportError:
-    def is_gpu_available():
-        return False
-
-
-    def get_device_info():
-        return {
-            'device_name': 'CPU',
-            'memory_total': None,
-            'memory_free': None
-        }
-
+from yflow.core.device import is_gpu_available, Device
 
 # Sample data generation for testing
 def generate_sample_stock_data(days=1000):
@@ -46,7 +31,6 @@ def generate_sample_stock_data(days=1000):
     print(f"Generated {len(data)} days of synthetic stock data")
     return data
 
-
 class Timer:
     def __init__(self, name="Operation"):
         self.name = name
@@ -60,7 +44,6 @@ class Timer:
         self.interval = self.end - self.start
         print(f"{self.name} took {self.interval:.2f} seconds")
 
-
 def create_sequences(data: np.ndarray,
                      seq_length: int = 60,
                      target_col: int = 3) -> Tuple[np.ndarray, np.ndarray]:
@@ -72,7 +55,6 @@ def create_sequences(data: np.ndarray,
         X.append(sequence)
         y.append(target)
     return np.array(X), np.array(y)
-
 
 def prepare_data(seq_length: int = 60,
                  train_split: float = 0.8) -> Tuple[
@@ -101,15 +83,10 @@ def prepare_data(seq_length: int = 60,
 
     return X_train, X_test, y_train, y_test, feature_scaler, target_scaler
 
-
-
-def create_model():
+def create_model(device):
     """Create and compile the stock prediction model with GPU support"""
     model = Model()
-
-    # Move model to GPU if available
-    device_type = 'gpu' if is_gpu_available() else 'cpu'
-    model.to(device_type)
+    model.to(device.device_type)
 
     model.add(YSTM(
         input_size=5,  # OHLCV features
@@ -131,7 +108,6 @@ def create_model():
 
     return model
 
-
 def evaluate_predictions(predictions: np.ndarray, y_test: np.ndarray, target_scaler: MinMaxScaler):
     """Evaluate and print model performance metrics"""
     # Convert predictions back to original scale
@@ -151,22 +127,11 @@ def evaluate_predictions(predictions: np.ndarray, y_test: np.ndarray, target_sca
 
     return predictions, y_test_orig
 
-
 if __name__ == "__main__":
     try:
         # Robust device detection
-        device_type = 'gpu' if is_gpu_available() else 'cpu'
-        print(f"\nDevice Information:")
-        print("-" * 50)
-
-        device_info = get_device_info()
-        if device_type == 'gpu':
-            print(f"Using GPU: {device_info['device_name']}")
-            print(f"Available memory: {device_info['memory_free'] / 1e9:.2f} GB" if device_info[
-                                                                                        'memory_free'] is not None else "GPU memory info unavailable")
-        else:
-            print("Using CPU: GPU not available")
-        print("-" * 50 + "\n")
+        device = Device('gpu' if is_gpu_available() else 'cpu')
+        print(f"\nUsing device: {device}")
 
         # Prepare data
         X_train, X_test, y_train, y_test, feature_scaler, target_scaler = prepare_data(
@@ -179,7 +144,7 @@ if __name__ == "__main__":
         print(f"Target shape: {y_train.shape}, {y_test.shape}")
 
         # Create and train model
-        model = create_model()
+        model = create_model(device)
 
         with Timer("Model training"):
             history = model.train(
