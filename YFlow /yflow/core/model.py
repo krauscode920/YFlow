@@ -115,9 +115,10 @@ class Model:
         best_val_loss, patience_counter, best_weights = float('inf'), 0, None
 
         for epoch in range(epochs):
-            indices = xp.random.permutation(n_samples)
-            X_shuffled = self.device.to_device(xp.array(X)[indices])
-            y_shuffled = self.device.to_device(xp.array(y)[indices])
+            indices = xp.arange(n_samples)
+            xp.random.shuffle(indices)
+            X_shuffled = self.device.to_device(X[indices])
+            y_shuffled = self.device.to_device(y[indices])
 
             epoch_loss = 0
             for batch in range(n_batches):

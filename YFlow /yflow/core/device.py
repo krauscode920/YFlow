@@ -19,13 +19,13 @@ class Device:
         self.xp = cp if (self.device_type == 'gpu' and CUPY_AVAILABLE) else np
 
     def to_device(self, x):
-        if not CUPY_AVAILABLE:
-            return np.asarray(x)
-        if isinstance(x, (np.ndarray, np.generic)):
-            return cp.asarray(x) if self.device_type == 'gpu' else x
-        if CUPY_AVAILABLE and isinstance(x, (cp.ndarray, cp.generic)):
-            return x if self.device_type == 'gpu' else cp.asnumpy(x)
-        return x
+        if self.device_type == 'cpu':
+            return np.array(x)
+        else:
+            import cupy as cp
+            if isinstance(x, np.ndarray):
+                return cp.array(x)
+            return x
 
     def to_cpu(self, x):
         if not CUPY_AVAILABLE or isinstance(x, (np.ndarray, np.generic)):
