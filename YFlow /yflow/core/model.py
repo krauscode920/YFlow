@@ -106,19 +106,18 @@ class Model:
         if not self.layers or not self.loss or not self.optimizer:
             raise ValueError("Model must have layers and be compiled before training")
 
-        xp = get_array_module(X)
+        X = self.device.to_device(X)
         y = self.device.to_device(y)
-        n_samples = len(X)
+        n_samples = X.shape[0]
         n_batches = (n_samples + batch_size - 1) // batch_size
 
         history = {'train_loss': [], 'val_loss': [] if validation_data else None}
         best_val_loss, patience_counter, best_weights = float('inf'), 0, None
 
         for epoch in range(epochs):
-            indices = xp.arange(n_samples)
-            xp.random.shuffle(indices)
-            X_shuffled = self.device.to_device(X[indices])
-            y_shuffled = self.device.to_device(y[indices])
+            indices = self.device.xp.random.permutation(n_samples)
+            X_shuffled = X[indices]
+            y_shuffled = y[indices]
 
             epoch_loss = 0
             for batch in range(n_batches):
@@ -129,20 +128,21 @@ class Model:
 
                 predictions = self._forward_pass(batch_X, training=True)
                 batch_loss = self.loss.calculate(predictions, batch_y)
-                epoch_loss += batch_loss
+                epoch_loss += self.device.to_cpu(batch_loss)
 
                 grad = self.loss.derivative(predictions, batch_y)
                 self._backward_pass(grad)
                 self._update_params()
 
             epoch_loss /= n_batches
-            history['train_loss'].append(float(self.device.to_cpu(epoch_loss)))
+            history['train_loss'].append(float(epoch_loss))
 
             if validation_data:
-                X_val, y_val = validation_data
+                X_val, y_val = self.device.to_device(validation_data[0]), self.device.to_device(validation_data[1])
                 val_predictions = self.predict(X_val)
                 val_loss = self.loss.calculate(val_predictions, y_val)
-                history['val_loss'].append(float(self.device.to_cpu(val_loss)))
+                val_loss = self.device.to_cpu(val_loss)
+                history['val_loss'].append(float(val_loss))
 
                 if early_stopping:
                     if val_loss < best_val_loss - min_delta:
