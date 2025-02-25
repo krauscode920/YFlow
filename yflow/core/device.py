@@ -183,18 +183,27 @@ class Device:
         if x is None:
             return None
 
-        if hasattr(x, 'get') and callable(x.get):  # Handle dict-like objects
+        # First check for CuPy arrays specifically
+        try:
+            import cupy as cp
+            if isinstance(x, cp.ndarray):
+                return cp.asnumpy(x)
+        except ImportError:
+            pass
+
+        # Then handle container types
+        if isinstance(x, dict):  # Dictionary
             return {k: self.to_cpu(v) for k, v in x.items()}
-        elif isinstance(x, list):
+        elif isinstance(x, list):  # List
             return [self.to_cpu(item) for item in x]
-        elif hasattr(x, 'shape'):  # Array-like object
+        elif hasattr(x, 'shape'):  # Other array-like object
             if self.device_type == 'gpu' and not isinstance(x, np.ndarray):
                 try:
-                    # Convert GPU array to CPU
-                    return self.xp.asnumpy(x)
-                except:
-                    # If asnumpy fails, try generic conversion
+                    # Try generic conversion for other GPU arrays
                     return np.array(x)
+                except:
+                    # If conversion fails, return as is
+                    return x
             return np.array(x)
         return x
 
