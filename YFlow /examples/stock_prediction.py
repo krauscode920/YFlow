@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 print(sys.path)
 
@@ -10,13 +11,14 @@ import time
 import sys
 import traceback
 
-# Updated imports to use the new multi-file structure
+# Updated imports to use the new device context
 from yflow.core.model import Model
 from yflow.layers.lstm import YSTM
 from yflow.layers.dense import Dense
 from yflow.losses.mse import MSELoss
 from yflow.optimizers.adam import Adam
-from yflow.core.device import is_gpu_available, Device
+from yflow.core.context import DeviceContext  # Updated import
+
 
 # Sample data generation for testing
 def generate_sample_stock_data(days=1000):
@@ -36,6 +38,7 @@ def generate_sample_stock_data(days=1000):
     print(f"Generated {len(data)} days of synthetic stock data")
     return data
 
+
 class Timer:
     def __init__(self, name="Operation"):
         self.name = name
@@ -49,6 +52,7 @@ class Timer:
         self.interval = self.end - self.start
         print(f"{self.name} took {self.interval:.2f} seconds")
 
+
 def create_sequences(data: np.ndarray,
                      seq_length: int = 60,
                      target_col: int = 3) -> Tuple[np.ndarray, np.ndarray]:
@@ -60,6 +64,7 @@ def create_sequences(data: np.ndarray,
         X.append(sequence)
         y.append(target)
     return np.array(X), np.array(y)
+
 
 def prepare_data(seq_length: int = 60,
                  train_split: float = 0.8) -> Tuple[
@@ -88,10 +93,12 @@ def prepare_data(seq_length: int = 60,
 
     return X_train, X_test, y_train, y_test, feature_scaler, target_scaler
 
-def create_model(device):
+
+def create_model():
     """Create and compile the stock prediction model with GPU support"""
     model = Model()
-    model.to(device.device_type)
+
+    # No need to explicitly move the model here - will be handled by context
 
     model.add(YSTM(
         input_size=5,  # OHLCV features
@@ -113,6 +120,7 @@ def create_model(device):
 
     return model
 
+
 def evaluate_predictions(predictions: np.ndarray, y_test: np.ndarray, target_scaler: MinMaxScaler):
     """Evaluate and print model performance metrics"""
     # Convert predictions back to original scale
@@ -132,11 +140,14 @@ def evaluate_predictions(predictions: np.ndarray, y_test: np.ndarray, target_sca
 
     return predictions, y_test_orig
 
+
 if __name__ == "__main__":
     try:
-        # Robust device detection
-        device = Device('gpu' if is_gpu_available() else 'cpu')
-        print(f"\nUsing device: {device}")
+        # Check for GPU availability using DeviceContext
+        device_context = DeviceContext.get_device()
+        device_type = 'gpu' if device_context.is_gpu_available() else 'cpu'
+
+        print(f"\nUsing device: {device_type}")
 
         # Prepare data
         X_train, X_test, y_train, y_test, feature_scaler, target_scaler = prepare_data(
@@ -148,25 +159,39 @@ if __name__ == "__main__":
         print(f"Testing data shape: {X_test.shape}")
         print(f"Target shape: {y_train.shape}, {y_test.shape}")
 
-        # Create and train model
-        model = create_model(device)
+        # Training and prediction with device context
+        with DeviceContext.device(device_type) as device:
+            # Create model
+            model = create_model()
 
-        with Timer("Model training"):
-            history = model.train(
-                X_train,
-                y_train,
-                epochs=50,
-                batch_size=32,
-                validation_data=(X_test, y_test),
-                early_stopping=True,
-                patience=5,
-                verbose=1
-            )
+            # Move data to device
+            X_train_device = device.to_device(X_train)
+            y_train_device = device.to_device(y_train)
+            X_test_device = device.to_device(X_test)
+            y_test_device = device.to_device(y_test)
 
-        # Make predictions and evaluate
-        with Timer("Prediction"):
-            predictions = model.predict(X_test)
+            # Train model
+            with Timer("Model training"):
+                history = model.train(
+                    X_train_device,
+                    y_train_device,
+                    epochs=50,
+                    batch_size=32,
+                    validation_data=(X_test_device, y_test_device),
+                    early_stopping=True,
+                    patience=5,
+                    verbose=1
+                )
 
+            # Make predictions
+            with Timer("Prediction"):
+                predictions_device = model.predict(X_test_device)
+                predictions = device.to_cpu(predictions_device)
+
+            # Clear GPU memory if applicable
+            device.clear_memory()
+
+        # Evaluate predictions (back on CPU)
         predictions, y_test_orig = evaluate_predictions(predictions, y_test, target_scaler)
 
     except Exception as e:
