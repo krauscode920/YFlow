@@ -1,0 +1,26 @@
+---
+name: Feature request
+about: Suggest a new component or enhancement for YFlow
+title: '[FEATURE]'
+labels: 'enhancement'
+assignees: ''
+
+---
+
+**Is your feature request related to a problem? Please describe.**
+A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+
+**Describe the solution you'd like**
+A clear and concise description of what you want to happen.
+
+**Proposed implementation**
+If you have ideas about how this could be implemented, describe them here.
+
+**Remember No External Deep Learning Library eg Pytorch or Tensorflow**
+Use of these corperate owned library will result in dismissal of the code.
+
+**Remember the 'Y' naming convention**
+If proposing new classes or modules, suggest names that follow the required 'Y' prefix convention.
+
+**Additional context**
+Add any other context or screenshots about the feature request here.
