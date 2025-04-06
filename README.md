@@ -76,6 +76,8 @@ def train(model, x_data, y_data, epochs=100):
         
         if epoch % 10 == 0:
             print(f"Epoch {epoch}, Loss: {loss.value}")
+
+
 Project Structure
 Copyyflow/
 ├── core/               # Core functionality
