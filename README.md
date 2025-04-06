@@ -78,8 +78,9 @@ def train(model, x_data, y_data, epochs=100):
             print(f"Epoch {epoch}, Loss: {loss.value}")
 
 
-Project Structure
-Copyyflow/
+
+
+yflow/
 ├── core/               # Core functionality
 │   ├── context.py      # Computation context
 │   ├── device.py       # Device abstraction (CPU/GPU)
@@ -101,6 +102,10 @@ Copyyflow/
 └── utils/              # Utility functions
     ├── lr_scheduler.py # Learning rate schedulers
     └── seq_norm.py     # Sequence normalization utilities
+
+
+
+
 GPU Support
 YFlow is designed with GPU acceleration in mind, though this functionality is currently untested on actual GPU hardware. The library includes device abstraction that automatically falls back to CPU execution when a GPU is not available.
 Future Plans
