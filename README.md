@@ -1,5 +1,11 @@
-YFlow: GPU-Compatible Deep Learning Library
-YFlow is a custom deep learning framework built from scratch with both CPU and GPU execution in mind. The library is designed to provide a clean, intuitive API while maintaining flexibility for advanced deep learning research and applications.
+YFlow: GPU-Compatible Deep Learning Library Built From Scratch
+YFlow is a custom deep learning framework built entirely from scratch with no dependencies on existing ML libraries. It supports both CPU and GPU execution and provides a clean, intuitive API while maintaining flexibility for advanced deep learning research and applications.
+Core Principles
+
+Zero External ML Dependencies: Built completely from first principles without using TensorFlow, PyTorch, or other ML libraries
+'Y' Naming Convention: All modules and components follow a distinctive naming convention starting with 'Y'
+Educational Purpose: Designed to understand deep learning fundamentals by implementing everything from scratch
+
 Features
 
 CPU and GPU Support: Designed with hardware acceleration in mind (GPU support implementation included but currently untested)
