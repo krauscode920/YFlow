@@ -1,22 +1,26 @@
-YFlow: GPU-Compatible Deep Learning Library Built From Scratch
+# YFlow: GPU-Compatible Deep Learning Library Built From Scratch
+
 YFlow is a custom deep learning framework built entirely from scratch with no dependencies on existing ML libraries. It supports both CPU and GPU execution and provides a clean, intuitive API while maintaining flexibility for advanced deep learning research and applications.
-Core Principles
 
-Zero External ML Dependencies: Built completely from first principles without using TensorFlow, PyTorch, or other ML libraries
-'Y' Naming Convention: All modules and components follow a distinctive naming convention starting with 'Y'
-Educational Purpose: Designed to understand deep learning fundamentals by implementing everything from scratch
+## Core Principles
 
-Features
+- **Zero External ML Dependencies**: Built completely from first principles without using TensorFlow, PyTorch, or other ML libraries
+- **'Y' Naming Convention**: All modules and components follow a distinctive naming convention starting with 'Y'
+- **Educational Purpose**: Designed to understand deep learning fundamentals by implementing everything from scratch
 
-CPU and GPU Support: Designed with hardware acceleration in mind (GPU support implementation included but currently untested)
-Modular Architecture: Well-organized structure separated into core functionality, layers, losses, optimizers, and utilities
-Automatic Differentiation: Built-in gradient computation
-Customizable Layers: Implement your own or use provided implementations
-Optimizers: Standard optimization algorithms including SGD, Adam, and RMSProp
-Device Abstraction: Clean separation between compute logic and hardware acceleration
+## Features
 
-Installation
-bashCopy# Clone the repository
+- **CPU and GPU Support**: Designed with hardware acceleration in mind (GPU support implementation included but currently untested)
+- **Modular Architecture**: Well-organized structure separated into core functionality, layers, losses, optimizers, and utilities
+- **Automatic Differentiation**: Built-in gradient computation
+- **Customizable Layers**: Implement your own or use provided implementations
+- **Optimizers**: Standard optimization algorithms including SGD, Adam, and RMSProp
+- **Device Abstraction**: Clean separation between compute logic and hardware acceleration
+
+## Installation
+
+```bash
+# Clone the repository
 git clone https://github.com/krauscode920/YFlow.git
 
 # Install dependencies
@@ -25,8 +29,12 @@ pip install -r requirements.txt
 
 # Install the package in development mode
 pip install -e .
-Quick Start Example
-pythonCopyfrom yflow.core.model import Model
+```
+
+## Quick Start Example
+
+```python
+from yflow.core.model import Model
 from yflow.layers.dense import Dense
 from yflow.layers.activations import ReLU, Sigmoid
 from yflow.losses.mse import MSELoss
@@ -76,12 +84,11 @@ def train(model, x_data, y_data, epochs=100):
         
         if epoch % 10 == 0:
             print(f"Epoch {epoch}, Loss: {loss.value}")
+```
 
+## Project Structure
 
-
-
-
-
+```
 yflow/
 ├── core/               # Core functionality
 │   ├── context.py      # Computation context
@@ -104,30 +111,35 @@ yflow/
 └── utils/              # Utility functions
     ├── lr_scheduler.py # Learning rate schedulers
     └── seq_norm.py     # Sequence normalization utilities
+```
 
+## GPU Support
 
-
-
-GPU Support
 YFlow is designed with GPU acceleration in mind, though this functionality is currently untested on actual GPU hardware. The library includes device abstraction that automatically falls back to CPU execution when a GPU is not available.
-Future Plans
 
-Transformer Architecture: Development of YFormers, a transformer-based module built on top of YFlow
-GPU Testing and Optimization: Comprehensive testing and optimization on GPU hardware
-Extended Layer Library: Additional layer types and activation functions
-Training Utilities: Data loaders, augmentation, and training loops
+## Future Plans
 
-Contributing
+- **Transformer Architecture**: Development of YFormers, a transformer-based module built on top of YFlow
+- **GPU Testing and Optimization**: Comprehensive testing and optimization on GPU hardware
+- **Extended Layer Library**: Additional layer types and activation functions
+- **Training Utilities**: Data loaders, augmentation, and training loops
+
+## Contributing
+
 Contributions are welcome! Areas where we'd particularly appreciate help:
 
-GPU testing and optimization
-Transformer architecture development
-Additional layer implementations
-Documentation improvements
-Example notebooks
+- GPU testing and optimization
+- Transformer architecture development
+- Additional layer implementations
+- Documentation improvements
+- Example notebooks
 
-Please see CONTRIBUTING.md for details on how to contribute.
-License
-This project is licensed under the MIT License - see the LICENSE file for details.
-Acknowledgements
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
 YFlow was created as an educational project to deeply understand deep learning frameworks and their implementation details. It is not intended for production use but rather as a learning tool and research platform.
