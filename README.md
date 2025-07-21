@@ -16,6 +16,7 @@ YFlow is a custom deep learning framework built entirely from scratch with no de
 - **Customizable Layers**: Implement your own or use provided implementations
 - **Optimizers**: Standard optimization algorithms including SGD, Adam, and RMSProp
 - **Device Abstraction**: Clean separation between compute logic and hardware acceleration
+- **Transformer Architecture**: Complete transformer implementation with YFormers module
 
 ## Installation
 
@@ -108,31 +109,182 @@ yflow/
 │   ├── adam.py         # Adam optimizer
 │   ├── rmsprop.py      # RMSProp optimizer
 │   └── sgd.py          # Stochastic gradient descent
+├── yformers/           # Transformer architecture module
+│   ├── attention.py    # Self-attention and multi-head attention
+│   ├── embeddings.py   # Token and positional embeddings
+│   ├── encoder.py      # Encoder blocks and components
+│   ├── decoder.py      # Decoder blocks and components
+│   ├── model.py        # Complete transformer models
+│   └── utils.py        # Transformer utilities and masks
 └── utils/              # Utility functions
     ├── lr_scheduler.py # Learning rate schedulers
     └── seq_norm.py     # Sequence normalization utilities
+```
+
+## YFormers - Transformer Architecture
+
+YFormers is a comprehensive transformer architecture implementation built on top of YFlow's device abstraction and layer system. It provides all the essential components needed to build and train transformer models with seamless CPU/GPU support.
+
+### Three Model Architectures
+
+#### 1. Full Transformer (Encoder-Decoder)
+Complete encoder-decoder transformer following "Attention Is All You Need" architecture.
+
+```python
+from yflow.yformers.model import TransformerModel
+
+model = TransformerModel(
+    src_vocab_size=10000,
+    tgt_vocab_size=10000,
+    d_model=512,
+    num_heads=8,
+    d_ff=2048,
+    num_encoder_layers=6,
+    num_decoder_layers=6,
+    dropout=0.1,
+    max_src_len=5000,
+    max_tgt_len=5000
+)
+
+# Forward pass
+logits = model.forward(src_tokens, tgt_tokens)
+
+# Text generation with advanced sampling
+generated = model.generate(src_tokens, max_len=100, temperature=0.8)
+```
+
+#### 2. Encoder-Only Model (BERT-style)
+Encoder-only transformer for classification and feature extraction.
+
+```python
+from yflow.yformers.model import EncoderOnlyModel
+
+model = EncoderOnlyModel(
+    vocab_size=30000,
+    d_model=768,
+    num_heads=12,
+    d_ff=3072,
+    num_layers=12,
+    num_classes=2  # For classification
+)
+
+# Classification
+logits = model.forward(tokens)
+```
+
+#### 3. Decoder-Only Model (GPT-style)
+Decoder-only transformer for autoregressive language generation.
+
+```python
+from yflow.yformers.model import DecoderOnlyModel
+
+model = DecoderOnlyModel(
+    vocab_size=50000,
+    d_model=768,
+    num_heads=12,
+    d_ff=3072,
+    num_layers=12,
+    max_seq_len=1024
+)
+
+# Text generation with advanced sampling strategies
+generated = model.generate(
+    prompt_tokens, 
+    max_len=200, 
+    temperature=0.7,
+    top_k=50,
+    top_p=0.9
+)
+```
+
+### Key YFormers Features
+
+- **Complete Transformer Components**: Self-attention, multi-head attention, encoder/decoder blocks
+- **Advanced Generation**: Text generation with temperature, top-k, and top-p sampling
+- **Flexible Embeddings**: Token embeddings with both fixed and learnable positional encodings
+- **Modern Implementations**: Pre-norm and post-norm architectures, GELU activation
+- **Masking Support**: Padding masks, causal masks, and cross-attention masks
+- **Device Abstraction**: Seamless CPU/GPU support through YFlow's device system
+
+### Core Components
+
+```python
+from yflow.yformers import (
+    SelfAttention, MultiHeadAttention,
+    TokenEmbedding, PositionalEncoding,
+    EncoderBlock, DecoderBlock,
+    EncoderStack, DecoderStack
+)
+
+# Multi-head attention layer
+mha = MultiHeadAttention(embed_dim=512, num_heads=8, dropout=0.1)
+
+# Complete encoder stack
+encoder = EncoderStack(
+    embed_dim=512,
+    num_heads=8,
+    ff_dim=2048,
+    num_layers=6,
+    dropout=0.1
+)
 ```
 
 ## GPU Support
 
 YFlow is designed with GPU acceleration in mind, though this functionality is currently untested on actual GPU hardware. The library includes device abstraction that automatically falls back to CPU execution when a GPU is not available.
 
+```python
+from yflow.yformers import is_gpu_available, get_device_info
+
+# Check GPU availability
+if is_gpu_available():
+    print("GPU is available for transformer operations")
+
+# Move model to GPU
+model.to('gpu')
+```
+
+## Training with YFlow and YFormers
+
+Both traditional neural networks and transformer models can be trained using YFlow's unified training infrastructure:
+
+```python
+# Training a transformer model
+from yflow.yformers.model import DecoderOnlyModel
+from yflow.losses.cross_entropy import CrossEntropyLoss
+from yflow.optimizers.adam import Adam
+
+# Initialize language model
+model = DecoderOnlyModel(vocab_size=vocab_size, d_model=512)
+loss_fn = CrossEntropyLoss()
+optimizer = Adam(learning_rate=0.0001)
+
+# Training loop
+for epoch in range(epochs):
+    logits = model.forward(input_tokens)
+    loss = loss_fn(logits, target_tokens)
+    loss.backward()
+    optimizer.step(model.parameters())
+    optimizer.zero_grad()
+```
+
 ## Future Plans
 
-- **Transformer Architecture**: Development of YFormers, a transformer-based module built on top of YFlow
-- **GPU Testing and Optimization**: Comprehensive testing and optimization on GPU hardware
+- **GPU Testing and Optimization**: Comprehensive testing and optimization on GPU hardware for both core layers and YFormers
 - **Extended Layer Library**: Additional layer types and activation functions
 - **Training Utilities**: Data loaders, augmentation, and training loops
+- **Advanced YFormers Features**: Vision transformers, sparse attention mechanisms
+- **Model Zoo**: Pre-trained transformer models and architectures
 
 ## Contributing
 
 Contributions are welcome! Areas where we'd particularly appreciate help:
 
-- GPU testing and optimization
-- Transformer architecture development
-- Additional layer implementations
-- Documentation improvements
-- Example notebooks
+- GPU testing and optimization for both core YFlow and YFormers
+- Additional transformer architectures (Vision Transformers, sparse attention)
+- Extended layer implementations
+- Documentation improvements and example notebooks
+- Performance optimizations
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute.
 
@@ -142,4 +294,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgements
 
-YFlow was created as an educational project to deeply understand deep learning frameworks and their implementation details. It is not intended for production use but rather as a learning tool and research platform.
+YFlow was created as an educational project to deeply understand deep learning frameworks and their implementation details. YFormers extends this educational mission to transformer architectures, providing a complete implementation of modern attention-based models. The project is not intended for production use but rather as a learning tool and research platform.
+
+## Version
+
+Current version: 0.2.0 (with YFormers integration)
