@@ -5,8 +5,9 @@ YFlow is a custom deep learning framework built entirely from scratch with no de
 ## Core Principles
 
 - **Zero External ML Dependencies**: Built completely from first principles without using TensorFlow, PyTorch, or other ML libraries
-- **'Y' Naming Convention**: All modules and components follow a distinctive naming convention starting with 'Y'
+- **Unified Architecture**: Clean, consistent implementation with strict governance to prevent fragmentation
 - **Educational Purpose**: Designed to understand deep learning fundamentals by implementing everything from scratch
+- **Community-Driven**: Open development with structured contribution process
 
 ## Features
 
@@ -85,6 +86,72 @@ def train(model, x_data, y_data, epochs=100):
         
         if epoch % 10 == 0:
             print(f"Epoch {epoch}, Loss: {loss.value}")
+```
+
+## Architecture Naming Convention & Governance
+
+YFlow follows a strict naming convention to maintain consistency and prevent architectural fragmentation:
+
+### **Fixed Architecture Names (CANNOT BE CHANGED)**
+
+These architectures have established names that are permanent and cannot be modified:
+
+- **YFormers** - All Transformer architectures (GPT, BERT, T5, etc.)
+- **YLSTM** - Long Short-Term Memory networks
+- **YQuence** - Standard Recurrent Neural Networks (RNN)
+- **BiYQuence** - Bidirectional Recurrent Neural Networks
+
+### **Governance Principles**
+
+#### **No Parallel Architectures**
+- There can only be ONE implementation per architecture type
+- Contributors cannot create alternative versions (e.g., "YFormers2" or "FastYFormers")
+- All improvements must be made to the existing architecture
+
+#### **Modification Process**
+- To improve an existing architecture, contributors must:
+  1. **Work within the existing codebase** (modify YFormers, not create alternatives)
+  2. **Submit pull requests** to the **Contribute branch only**
+  3. **Pass code review** and maintainer approval
+  4. **Maintain backward compatibility** where possible
+
+#### **New Architecture Freedom**
+- Contributors are welcome to create entirely **new architectures**
+- New architectures can be named freely (following general YFlow conventions)
+- Novel architectures are subject to evaluation and approval
+- Must demonstrate clear innovation over existing architectures
+
+### **Examples**
+
+#### ✅ **Allowed Contributions:**
+```python
+# Improving existing YFormers
+class YFormers(TransformerModel):
+    def __init__(self):
+        # Add new attention mechanism to existing architecture
+        self.improved_attention = NewAttentionVariant()
+
+# Creating new architecture
+class YConvolution(Model):
+    """Novel convolutional architecture"""
+    pass
+
+class YHybrid(Model):
+    """New hybrid CNN-Transformer architecture"""
+    pass
+```
+
+#### ❌ **Not Allowed:**
+```python
+# Creating parallel transformer implementations
+class YFormers2(Model):  # ❌ No parallel architectures
+    pass
+
+class FastYFormers(Model):  # ❌ No alternative implementations
+    pass
+
+class YBert(Model):  # ❌ BERT variants belong in YFormers
+    pass
 ```
 
 ## Project Structure
@@ -268,25 +335,59 @@ for epoch in range(epochs):
     optimizer.zero_grad()
 ```
 
+## Contributing
+
+**IMPORTANT: All contributions must be submitted to the Contribute branch only.**
+
+### **Branch Structure**
+- **Main Branch**: https://github.com/krauscode920/YFlow/tree/main (Protected - No direct contributions)
+- **Contribute Branch**: https://github.com/krauscode920/YFlow/tree/Contribute (All PRs go here)
+
+### **Contribution Process**
+1. **Fork the repository** from the main branch
+2. **Create your feature branch** from the Contribute branch
+3. **Make your changes** following our naming conventions
+4. **Submit pull request** to the **Contribute branch ONLY**
+5. **Code review** and approval by maintainers
+6. **Merge to main** branch upon approval
+
+### **Contribution Guidelines**
+
+#### **For Existing Architectures (YFormers, YLSTM, etc.)**
+- Work within the existing architecture codebase
+- No parallel implementations allowed
+- Must maintain backward compatibility
+- Requires thorough testing and documentation
+
+#### **For New Architectures**
+- Propose architecture with clear innovation/use case
+- Follow YFlow naming conventions
+- Provide comprehensive tests and documentation
+- Subject to evaluation and approval
+
+### **Areas for Contribution**
+- **GPU testing and optimization** for both core YFlow and YFormers
+- **Additional transformer architectures** within YFormers
+- **Extended layer implementations**
+- **Documentation improvements** and example notebooks
+- **Performance optimizations**
+- **Bug fixes and testing**
+
+#### **Specific Help Needed:**
+- **GPU Validation**: Test YFormers and core layers on GPU hardware
+- **Architecture Extensions**: Add Vision Transformers, sparse attention to YFormers
+- **Performance Benchmarking**: Compare against PyTorch implementations
+- **Documentation**: Tutorial notebooks and educational content
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+
 ## Future Plans
 
 - **GPU Testing and Optimization**: Comprehensive testing and optimization on GPU hardware for both core layers and YFormers
-- **Extended Layer Library**: Additional layer types and activation functions
+- **Extended Architecture Library**: YLSTM, YQuence, BiYQuence implementations
 - **Training Utilities**: Data loaders, augmentation, and training loops
-- **Advanced YFormers Features**: Vision transformers, sparse attention mechanisms
+- **Advanced YFormers Features**: Vision transformers, sparse attention mechanisms within the unified YFormers architecture
 - **Model Zoo**: Pre-trained transformer models and architectures
-
-## Contributing
-
-Contributions are welcome! Areas where we'd particularly appreciate help:
-
-- GPU testing and optimization for both core YFlow and YFormers
-- Additional transformer architectures (Vision Transformers, sparse attention)
-- Extended layer implementations
-- Documentation improvements and example notebooks
-- Performance optimizations
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute.
 
 ## License
 
@@ -298,4 +399,4 @@ YFlow was created as an educational project to deeply understand deep learning f
 
 ## Version
 
-Current version: 0.2.0 (with YFormers integration)
+Current version: 0.2.0 (with YFormers integration and unified governance model)
