@@ -118,3 +118,46 @@ class SELU(Activation):
         return self.scale * xp.where(self.input > 0,
                                    grad,
                                    grad * self.alpha * xp.exp(self.input))
+
+
+# Add this GELU class to your yflow/layers/activations.py file
+# Insert it after the existing activation classes
+
+class GELU(Activation):
+    """
+    Gaussian Error Linear Unit activation with GPU support.
+
+    Approximation of the GELU activation from "Gaussian Error Linear Units (GELUs)"
+    paper: https://arxiv.org/abs/1606.08415
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward_impl(self, x):
+        """
+        Forward pass for GELU activation.
+        Uses the approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+        """
+        xp = self.device.xp
+        sqrt_2_over_pi = xp.sqrt(2 / xp.pi)
+        return 0.5 * x * (1 + xp.tanh(sqrt_2_over_pi * (x + 0.044715 * xp.power(x, 3))))
+
+    def _backward_impl(self, grad):
+        """
+        Backward pass for GELU activation.
+        """
+        xp = self.device.xp
+        x = self.input
+
+        # Parameters from approximation
+        sqrt_2_over_pi = xp.sqrt(2 / xp.pi)
+        coef = 0.044715
+
+        # Terms for derivative
+        cdf_term = 0.5 * (1 + xp.tanh(sqrt_2_over_pi * (x + coef * xp.power(x, 3))))
+        pdf_term = sqrt_2_over_pi * (1 + 3 * coef * xp.power(x, 2)) * (
+                1 - xp.power(xp.tanh(sqrt_2_over_pi * (x + coef * xp.power(x, 3))), 2))
+
+        # Compute gradient
+        return grad * (cdf_term + x * pdf_term)

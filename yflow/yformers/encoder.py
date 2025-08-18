@@ -16,65 +16,6 @@ from ..layers.dense import Dense
 from ..layers.activations import ReLU, GELU
 
 
-class GELU(Layer):
-    """
-    Gaussian Error Linear Unit activation function.
-
-    Approximation of the GELU activation from "Gaussian Error Linear Units (GELUs)"
-    paper: https://arxiv.org/abs/1606.08415
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        """
-        Forward pass for GELU activation.
-
-        Args:
-            x: Input tensor
-
-        Returns:
-            GELU activation output
-        """
-        # Move input to correct device
-        x = self.device.to_device(x)
-        xp = self.device.xp
-
-        # Store input for backward pass
-        self.input = x
-
-        # Approximate GELU activation
-        return 0.5 * x * (1 + xp.tanh(xp.sqrt(2 / np.pi) * (x + 0.044715 * xp.power(x, 3))))
-
-    def backward(self, output_gradient):
-        """
-        Backward pass for GELU activation.
-
-        Args:
-            output_gradient: Gradient from next layer
-
-        Returns:
-            Gradient with respect to input
-        """
-        # Ensure gradient is on correct device
-        output_gradient = self.device.to_device(output_gradient)
-        xp = self.device.xp
-
-        x = self.input
-
-        # Parameters from approximation
-        sqrt_2_over_pi = np.sqrt(2 / np.pi)
-        coef = 0.044715
-
-        # Terms for derivative
-        cdf_term = 0.5 * (1 + xp.tanh(sqrt_2_over_pi * (x + coef * xp.power(x, 3))))
-        pdf_term = sqrt_2_over_pi * (1 + 3 * coef * xp.power(x, 2)) * (
-                    1 - xp.power(xp.tanh(sqrt_2_over_pi * (x + coef * xp.power(x, 3))), 2))
-
-        # Compute gradient
-        return output_gradient * (cdf_term + x * pdf_term)
-
 
 class FeedForward(Layer):
     """
@@ -136,9 +77,12 @@ class FeedForward(Layer):
             return x * dropout_mask
         return x
 
+    # Replace the forward method in yflow/yformers/encoder.py FeedForward class:
+
     def forward(self, x):
         """
         Forward pass for feed-forward network.
+        Handles 3D inputs properly for transformers.
 
         Args:
             x: Input tensor of shape (batch_size, seq_len, embed_dim)
@@ -151,9 +95,14 @@ class FeedForward(Layer):
 
         # Store input for backward pass
         self.input = x
+        original_shape = x.shape
+
+        # Reshape to 2D for dense layers: (batch_size * seq_len, embed_dim)
+        batch_size, seq_len, embed_dim = original_shape
+        x_reshaped = x.reshape(-1, embed_dim)
 
         # First linear transformation
-        hidden = self.fc1.forward(x)
+        hidden = self.fc1.forward(x_reshaped)
 
         # Apply activation
         activated = self.activation.forward(hidden)
@@ -169,39 +118,57 @@ class FeedForward(Layer):
         output_dropped = self._apply_dropout(output)
         self.dropout_mask2 = getattr(self, 'dropout_mask', None)
 
-        return output_dropped
+        # Reshape back to 3D: (batch_size, seq_len, embed_dim)
+        output_3d = output_dropped.reshape(batch_size, seq_len, embed_dim)
+
+        return output_3d
+
+    # Also replace the backward method in yflow/yformers/encoder.py FeedForward class:
 
     def backward(self, output_gradient):
         """
         Backward pass for feed-forward network.
+        Handles 3D gradients properly for transformers.
 
         Args:
-            output_gradient: Gradient from next layer
+            output_gradient: Gradient from next layer of shape (batch_size, seq_len, embed_dim)
 
         Returns:
-            Gradient with respect to input
+            Gradient with respect to input of shape (batch_size, seq_len, embed_dim)
         """
         # Ensure gradient is on correct device
         output_gradient = self.device.to_device(output_gradient)
 
+        # Get original shape from stored input
+        batch_size, seq_len, embed_dim = self.input.shape
+
+        # Reshape gradient to 2D: (batch_size * seq_len, embed_dim)
+        output_grad_2d = output_gradient.reshape(-1, embed_dim)
+
         # Apply output dropout gradient if used
         if self.training and self.dropout_rate > 0 and self.dropout_mask2 is not None:
-            output_gradient = output_gradient * self.dropout_mask2
+            dropout_mask_2d = self.dropout_mask2.reshape(-1, embed_dim)
+            output_grad_2d = output_grad_2d * dropout_mask_2d
 
         # Backpropagate through second linear layer
-        activated_grad = self.fc2.backward(output_gradient)
+        activated_grad = self.fc2.backward(output_grad_2d)
 
         # Apply activation dropout gradient if used
         if self.training and self.dropout_rate > 0 and self.dropout_mask1 is not None:
-            activated_grad = activated_grad * self.dropout_mask1
+            dropout_mask_1d = self.dropout_mask1.reshape(-1, self.ff_dim)
+            activated_grad = activated_grad * dropout_mask_1d
 
         # Backpropagate through activation
         hidden_grad = self.activation.backward(activated_grad)
 
         # Backpropagate through first linear layer
-        input_grad = self.fc1.backward(hidden_grad)
+        input_grad_2d = self.fc1.backward(hidden_grad)
 
-        return input_grad
+        # Reshape back to 3D: (batch_size, seq_len, embed_dim)
+        input_grad_3d = input_grad_2d.reshape(batch_size, seq_len, embed_dim)
+
+        return input_grad_3d
+
 
     def get_trainable_params(self) -> Dict:
         """Get trainable parameters from sub-layers"""

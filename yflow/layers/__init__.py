@@ -10,7 +10,8 @@ from .activations import (
     Tanh,
     Softmax,
     ELU,
-    SELU
+    SELU,
+    GELU
 )
 
 
