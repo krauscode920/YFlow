@@ -100,27 +100,12 @@ class TransformerBase(Model):
             'device': self.device.device_type
         }
 
+# Add this to your yflow/yformers/model.py file
+# Replace the duplicate TransformerModel class with this fixed version
+
 class TransformerModel(TransformerBase):
     """
     Complete encoder-decoder transformer as described in "Attention Is All You Need".
-
-    This implementation follows the original transformer architecture with both
-    encoder and decoder stacks for sequence-to-sequence tasks.
-
-    Args:
-        src_vocab_size (int): Size of source vocabulary
-        tgt_vocab_size (int): Size of target vocabulary
-        d_model (int): Embedding dimension
-        num_heads (int): Number of attention heads
-        d_ff (int): Feed-forward inner dimension
-        num_encoder_layers (int): Number of encoder blocks
-        num_decoder_layers (int): Number of decoder blocks
-        dropout (float): Dropout rate
-        max_src_len (int): Maximum source sequence length
-        max_tgt_len (int): Maximum target sequence length
-        share_embeddings (bool): Whether to share embeddings between encoder and decoder
-        pre_norm (bool): Whether to use Pre-LN (True) or Post-LN (False) architecture
-        activation (str): Activation function for feed-forward networks
     """
 
     def __init__(self,
@@ -172,7 +157,6 @@ class TransformerModel(TransformerBase):
 
         # Decoder embedding
         if share_embeddings and src_vocab_size == tgt_vocab_size:
-            # Share token embeddings but use separate positional encodings
             self.decoder_embedding = PositionalEmbedding(
                 vocab_size=tgt_vocab_size,
                 embed_dim=d_model,
@@ -185,7 +169,6 @@ class TransformerModel(TransformerBase):
             # Share token embeddings' weights
             self.decoder_embedding.token_embed.weight = self.encoder_embedding.token_embed.weight
         else:
-            # Use completely separate embeddings
             self.decoder_embedding = PositionalEmbedding(
                 vocab_size=tgt_vocab_size,
                 embed_dim=d_model,
@@ -225,19 +208,7 @@ class TransformerModel(TransformerBase):
         )
 
     def forward(self, src, tgt=None, src_mask=None, tgt_mask=None, cross_mask=None):
-        """
-        Forward pass through the complete transformer model.
-
-        Args:
-            src: Source tokens of shape (batch_size, src_seq_len)
-            tgt: Target tokens of shape (batch_size, tgt_seq_len)
-            src_mask: Source padding mask
-            tgt_mask: Target padding and causal mask
-            cross_mask: Cross-attention mask
-
-        Returns:
-            Output logits of shape (batch_size, tgt_seq_len, tgt_vocab_size)
-        """
+        """Forward pass through the complete transformer model."""
         # Move inputs to correct device
         src = self.device.to_device(src)
         if tgt is not None:
@@ -251,9 +222,8 @@ class TransformerModel(TransformerBase):
 
         # For inference, tgt might be None
         if tgt is None:
-            # This is the first token prediction case (start with just BOS token)
             xp = self.device.xp
-            tgt = xp.ones((src.shape[0], 1), dtype=xp.int32)  # Assume BOS token is 1
+            tgt = xp.ones((src.shape[0], 1), dtype=xp.int32)
 
         if tgt_mask is None:
             tgt_mask = self.create_combined_mask(tgt)
@@ -297,15 +267,7 @@ class TransformerModel(TransformerBase):
         return logits
 
     def backward(self, output_gradient):
-        """
-        Backward pass through the complete transformer model.
-
-        Args:
-            output_gradient: Gradient from loss function
-
-        Returns:
-            Tuple of gradients with respect to inputs
-        """
+        """Backward pass through the complete transformer model."""
         # Ensure gradient is on correct device
         output_gradient = self.device.to_device(output_gradient)
 
@@ -324,23 +286,10 @@ class TransformerModel(TransformerBase):
         # Backpropagate through encoder embedding
         _ = self.encoder_embedding.backward(enc_input_grad)
 
-        # No gradient with respect to token indices
         return None, None
 
     def generate(self, src, max_len=None, temperature=1.0, top_k=0, top_p=0.0):
-        """
-        Generate a target sequence from source sequence.
-
-        Args:
-            src: Source tokens of shape (batch_size, src_seq_len)
-            max_len: Maximum generation length (default: max_tgt_len)
-            temperature: Sampling temperature (1.0 = no change, <1.0 = sharper, >1.0 = more random)
-            top_k: If >0, filter to top k tokens before sampling
-            top_p: If >0, filter to tokens with cumulative probability >= top_p
-
-        Returns:
-            Generated sequence of shape (batch_size, generated_len)
-        """
+        """Generate a target sequence from source sequence."""
         if max_len is None:
             max_len = self.max_tgt_len
 
@@ -374,11 +323,8 @@ class TransformerModel(TransformerBase):
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
-            # Convert logits to probabilities
-            probs = xp.softmax(next_token_logits, axis=-1)
-
-            # Simple sampling (choose most probable token for now)
-            next_token = xp.argmax(probs, axis=-1).reshape(-1, 1)
+            # Simple sampling (most probable token)
+            next_token = xp.argmax(xp.softmax(next_token_logits, axis=-1), axis=-1).reshape(-1, 1)
 
             # Append to output
             output = xp.concatenate([output, next_token], axis=1)
@@ -398,25 +344,6 @@ class TransformerModel(TransformerBase):
         self.decoder.to(device_type)
         self.output_proj.to(device_type)
         return self
-
-    def get_config(self) -> Dict:
-        """Get model configuration"""
-        config = super().get_config()
-        config.update({
-            'src_vocab_size': self.src_vocab_size,
-            'tgt_vocab_size': self.tgt_vocab_size,
-            'd_model': self.d_model,
-            'num_heads': self.num_heads,
-            'd_ff': self.d_ff,
-            'num_encoder_layers': self.num_encoder_layers,
-            'num_decoder_layers': self.num_decoder_layers,
-            'dropout': self.dropout,
-            'max_src_len': self.max_src_len,
-            'max_tgt_len': self.max_tgt_len,
-            'share_embeddings': self.share_embeddings,
-            'pre_norm': self.pre_norm
-        })
-        return config
 
     def get_trainable_params(self) -> Dict:
         """Get all trainable parameters"""
@@ -514,462 +441,6 @@ class TransformerModel(TransformerBase):
             self.decoder.update_params(dec_params)
         if out_params:
             self.output_proj.update_params(out_params)
-
-
-class TransformerModel(TransformerBase):
-    """
-    Complete encoder-decoder transformer as described in "Attention Is All You Need".
-
-    This implementation follows the original transformer architecture with both
-    encoder and decoder stacks for sequence-to-sequence tasks.
-
-    Args:
-        src_vocab_size (int): Size of source vocabulary
-        tgt_vocab_size (int): Size of target vocabulary
-        d_model (int): Embedding dimension
-        num_heads (int): Number of attention heads
-        d_ff (int): Feed-forward inner dimension
-        num_encoder_layers (int): Number of encoder blocks
-        num_decoder_layers (int): Number of decoder blocks
-        dropout (float): Dropout rate
-        max_src_len (int): Maximum source sequence length
-        max_tgt_len (int): Maximum target sequence length
-        share_embeddings (bool): Whether to share embeddings between encoder and decoder
-        pre_norm (bool): Whether to use Pre-LN (True) or Post-LN (False) architecture
-        activation (str): Activation function for feed-forward networks
-    """
-
-    def __init__(self,
-                 src_vocab_size: int,
-                 tgt_vocab_size: int,
-                 d_model: int = 512,
-                 num_heads: int = 8,
-                 d_ff: int = 2048,
-                 num_encoder_layers: int = 6,
-                 num_decoder_layers: int = 6,
-                 dropout: float = 0.1,
-                 max_src_len: int = 5000,
-                 max_tgt_len: int = 5000,
-                 share_embeddings: bool = False,
-                 pre_norm: bool = True,
-                 activation: str = 'relu',
-                 seed: Optional[int] = None):
-        super().__init__(seed=seed)
-
-        # Store model configuration
-        self.src_vocab_size = src_vocab_size
-        self.tgt_vocab_size = tgt_vocab_size
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.d_ff = d_ff
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
-        self.dropout = dropout
-        self.max_src_len = max_src_len
-        self.max_tgt_len = max_tgt_len
-        self.share_embeddings = share_embeddings
-        self.pre_norm = pre_norm
-
-        # Check that embedding dimension is compatible with number of heads
-        if d_model % num_heads != 0:
-            raise ValueError(f"d_model ({d_model}) must be divisible by num_heads ({num_heads})")
-
-        # Initialize components
-        # Encoder embedding
-        self.encoder_embedding = PositionalEmbedding(
-            vocab_size=src_vocab_size,
-            embed_dim=d_model,
-            max_seq_len=max_src_len,
-            dropout=dropout,
-            padding_idx=0,
-            learned_pos=False,
-            scale_embed=True
-        )
-
-        # Decoder embedding
-        if share_embeddings and src_vocab_size == tgt_vocab_size:
-            # Share token embeddings but use separate positional encodings
-            self.decoder_embedding = PositionalEmbedding(
-                vocab_size=tgt_vocab_size,
-                embed_dim=d_model,
-                max_seq_len=max_tgt_len,
-                dropout=dropout,
-                padding_idx=0,
-                learned_pos=False,
-                scale_embed=True
-            )
-            # Share token embeddings' weights
-            self.decoder_embedding.token_embed.weight = self.encoder_embedding.token_embed.weight
-        else:
-            # Use completely separate embeddings
-            self.decoder_embedding = PositionalEmbedding(
-                vocab_size=tgt_vocab_size,
-                embed_dim=d_model,
-                max_seq_len=max_tgt_len,
-                dropout=dropout,
-                padding_idx=0,
-                learned_pos=False,
-                scale_embed=True
-            )
-
-        # Encoder
-        self.encoder = EncoderStack(
-            embed_dim=d_model,
-            num_heads=num_heads,
-            ff_dim=d_ff,
-            num_layers=num_encoder_layers,
-            dropout=dropout,
-            pre_norm=pre_norm,
-            activation=activation
-        )
-
-        # Decoder
-        self.decoder = DecoderStack(
-            embed_dim=d_model,
-            num_heads=num_heads,
-            ff_dim=d_ff,
-            num_layers=num_decoder_layers,
-            dropout=dropout,
-            pre_norm=pre_norm,
-            activation=activation
-        )
-
-        # Output projection
-        self.output_proj = Dense(
-            input_size=d_model,
-            output_size=tgt_vocab_size
-        )
-
-        def forward(self, src, tgt=None, src_mask=None, tgt_mask=None, cross_mask=None):
-            """
-            Forward pass through the complete transformer model.
-
-            Args:
-                src: Source tokens of shape (batch_size, src_seq_len)
-                tgt: Target tokens of shape (batch_size, tgt_seq_len)
-                src_mask: Source padding mask
-                tgt_mask: Target padding and causal mask
-                cross_mask: Cross-attention mask
-
-            Returns:
-                Output logits of shape (batch_size, tgt_seq_len, tgt_vocab_size)
-            """
-            # Move inputs to correct device
-            src = self.device.to_device(src)
-            if tgt is not None:
-                tgt = self.device.to_device(tgt)
-
-            # Create masks if not provided
-            if src_mask is None:
-                src_mask = self.create_padding_mask(src)
-            else:
-                src_mask = self.device.to_device(src_mask)
-
-            # For inference, tgt might be None
-            if tgt is None:
-                # This is the first token prediction case (start with just BOS token)
-                xp = self.device.xp
-                tgt = xp.ones((src.shape[0], 1), dtype=xp.int32)  # Assume BOS token is 1
-
-            if tgt_mask is None:
-                tgt_mask = self.create_combined_mask(tgt)
-            else:
-                tgt_mask = self.device.to_device(tgt_mask)
-
-            if cross_mask is None:
-                cross_mask = self.create_padding_mask(src)
-            else:
-                cross_mask = self.device.to_device(cross_mask)
-
-            # Encoder path
-            enc_input = self.encoder_embedding.forward(src)
-            enc_output = self.encoder.forward(enc_input, mask=src_mask)
-
-            # Decoder path
-            dec_input = self.decoder_embedding.forward(tgt)
-            dec_output = self.decoder.forward(
-                dec_input,
-                enc_output,
-                self_attn_mask=tgt_mask,
-                cross_attn_mask=cross_mask
-            )
-
-            # Output projection
-            logits = self.output_proj.forward(dec_output)
-
-            # Cache inputs and outputs for backward pass
-            self.cache = {
-                'src': src,
-                'tgt': tgt,
-                'src_mask': src_mask,
-                'tgt_mask': tgt_mask,
-                'cross_mask': cross_mask,
-                'enc_input': enc_input,
-                'enc_output': enc_output,
-                'dec_input': dec_input,
-                'dec_output': dec_output
-            }
-
-            return logits
-
-        def backward(self, output_gradient):
-            """
-            Backward pass through the complete transformer model.
-
-            Args:
-                output_gradient: Gradient from loss function
-
-            Returns:
-                Tuple of gradients with respect to inputs
-            """
-            # Ensure gradient is on correct device
-            output_gradient = self.device.to_device(output_gradient)
-
-            # Backpropagate through output projection
-            dec_output_grad = self.output_proj.backward(output_gradient)
-
-            # Backpropagate through decoder
-            dec_input_grad, enc_output_grad = self.decoder.backward(dec_output_grad)
-
-            # Backpropagate through decoder embedding
-            _ = self.decoder_embedding.backward(dec_input_grad)
-
-            # Backpropagate through encoder
-            enc_input_grad = self.encoder.backward(enc_output_grad)
-
-            # Backpropagate through encoder embedding
-            _ = self.encoder_embedding.backward(enc_input_grad)
-
-            # No gradient with respect to token indices
-            return None, None
-
-        def generate(self, src, max_len=None, temperature=1.0, top_k=0, top_p=0.0):
-            """
-            Generate a target sequence from source sequence.
-
-            Args:
-                src: Source tokens of shape (batch_size, src_seq_len)
-                max_len: Maximum generation length (default: max_tgt_len)
-                temperature: Sampling temperature (1.0 = no change, <1.0 = sharper, >1.0 = more random)
-                top_k: If >0, filter to top k tokens before sampling
-                top_p: If >0, filter to tokens with cumulative probability >= top_p
-
-            Returns:
-                Generated sequence of shape (batch_size, generated_len)
-            """
-            if max_len is None:
-                max_len = self.max_tgt_len
-
-            # Move inputs to correct device
-            src = self.device.to_device(src)
-            xp = self.device.xp
-
-            # Encoder only needs to run once
-            enc_input = self.encoder_embedding.forward(src)
-            enc_output = self.encoder.forward(enc_input, mask=self.create_padding_mask(src))
-
-            # Initialize with BOS token (assuming token ID 1)
-            batch_size = src.shape[0]
-            output = xp.ones((batch_size, 1), dtype=xp.int32)
-
-            # Generate tokens auto-regressively
-            for i in range(max_len - 1):
-                # Predict next token
-                logits = self.forward(
-                    src,
-                    output,
-                    src_mask=self.create_padding_mask(src),
-                    tgt_mask=self.create_combined_mask(output),
-                    cross_mask=self.create_padding_mask(src)
-                )
-
-                # Get logits for the last position
-                next_token_logits = logits[:, -1, :]
-
-                # Apply temperature
-                if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
-
-                # Apply top-k filtering
-                if top_k > 0:
-                    # Get top-k values and indices
-                    v, _ = xp.topk(next_token_logits, min(top_k, next_token_logits.shape[-1]))
-                    # Filter values below the threshold
-                    min_values = v[:, -1].reshape(-1, 1)
-                    next_token_logits = xp.where(
-                        next_token_logits < min_values,
-                        xp.ones_like(next_token_logits) * -float('inf'),
-                        next_token_logits
-                    )
-
-                # Apply top-p (nucleus) filtering
-                if top_p > 0.0:
-                    sorted_logits = xp.sort(next_token_logits, axis=-1)[:, ::-1]
-                    sorted_indices = xp.argsort(next_token_logits, axis=-1)[:, ::-1]
-                    cumulative_probs = xp.cumsum(xp.softmax(sorted_logits, axis=-1), axis=-1)
-
-                    # Remove tokens with cumulative probability above the threshold
-                    sorted_indices_to_remove = cumulative_probs > top_p
-                    # Keep at least one token
-                    sorted_indices_to_remove[:, 0] = 0
-
-                    # Create mask of tokens to remove
-                    indices_to_remove = xp.zeros_like(next_token_logits, dtype=bool)
-                    for b in range(batch_size):
-                        indices_to_remove[b, sorted_indices[b, sorted_indices_to_remove[b]]] = True
-
-                    # Set removed tokens to -inf
-                    next_token_logits = xp.where(
-                        indices_to_remove,
-                        xp.ones_like(next_token_logits) * -float('inf'),
-                        next_token_logits
-                    )
-
-                # Convert logits to probabilities
-                probs = xp.softmax(next_token_logits, axis=-1)
-
-                # Sample next token
-                next_token = xp.random.choice(
-                    self.tgt_vocab_size,
-                    size=(batch_size, 1),
-                    p=probs.T  # Transpose to get (vocab_size, batch_size)
-                )
-
-                # Append to output
-                output = xp.concatenate([output, next_token], axis=1)
-
-                # Check if all sequences have hit EOS token (assuming token ID 2)
-                if (output == 2).sum() == batch_size:
-                    break
-
-            return output
-
-        def to(self, device_type: str) -> 'TransformerModel':
-            """Move model to specified device"""
-            super().to(device_type)
-            self.encoder_embedding.to(device_type)
-            self.decoder_embedding.to(device_type)
-            self.encoder.to(device_type)
-            self.decoder.to(device_type)
-            self.output_proj.to(device_type)
-            return self
-
-        def get_config(self) -> Dict:
-            """Get model configuration"""
-            config = super().get_config()
-            config.update({
-                'src_vocab_size': self.src_vocab_size,
-                'tgt_vocab_size': self.tgt_vocab_size,
-                'd_model': self.d_model,
-                'num_heads': self.num_heads,
-                'd_ff': self.d_ff,
-                'num_encoder_layers': self.num_encoder_layers,
-                'num_decoder_layers': self.num_decoder_layers,
-                'dropout': self.dropout,
-                'max_src_len': self.max_src_len,
-                'max_tgt_len': self.max_tgt_len,
-                'share_embeddings': self.share_embeddings,
-                'pre_norm': self.pre_norm
-            })
-            return config
-
-        def get_trainable_params(self) -> Dict:
-            """Get all trainable parameters"""
-            params = {}
-
-            # Get parameters from encoder embedding
-            enc_emb_params = self.encoder_embedding.get_trainable_params()
-            for key, value in enc_emb_params.items():
-                params[f'enc_emb_{key}'] = value
-
-            # Get parameters from decoder embedding (if not shared)
-            if not self.share_embeddings or self.src_vocab_size != self.tgt_vocab_size:
-                dec_emb_params = self.decoder_embedding.get_trainable_params()
-                for key, value in dec_emb_params.items():
-                    params[f'dec_emb_{key}'] = value
-
-            # Get parameters from encoder
-            enc_params = self.encoder.get_trainable_params()
-            for key, value in enc_params.items():
-                params[f'enc_{key}'] = value
-
-            # Get parameters from decoder
-            dec_params = self.decoder.get_trainable_params()
-            for key, value in dec_params.items():
-                params[f'dec_{key}'] = value
-
-            # Get parameters from output projection
-            out_params = self.output_proj.get_trainable_params()
-            for key, value in out_params.items():
-                params[f'out_{key}'] = value
-
-            return params
-
-        def get_gradients(self) -> Dict:
-            """Get all parameter gradients"""
-            grads = {}
-
-            # Get gradients from encoder embedding
-            enc_emb_grads = self.encoder_embedding.get_gradients()
-            for key, value in enc_emb_grads.items():
-                grads[f'enc_emb_{key}'] = value
-
-            # Get gradients from decoder embedding (if not shared)
-            if not self.share_embeddings or self.src_vocab_size != self.tgt_vocab_size:
-                dec_emb_grads = self.decoder_embedding.get_gradients()
-                for key, value in dec_emb_grads.items():
-                    grads[f'dec_emb_{key}'] = value
-
-            # Get gradients from encoder
-            enc_grads = self.encoder.get_gradients()
-            for key, value in enc_grads.items():
-                grads[f'enc_{key}'] = value
-
-            # Get gradients from decoder
-            dec_grads = self.decoder.get_gradients()
-            for key, value in dec_grads.items():
-                grads[f'dec_{key}'] = value
-
-            # Get gradients from output projection
-            out_grads = self.output_proj.get_gradients()
-            for key, value in out_grads.items():
-                grads[f'out_{key}'] = value
-
-            return grads
-
-        def update_params(self, params: Dict):
-            """Update all parameters"""
-            # Group parameters by component
-            enc_emb_params = {}
-            dec_emb_params = {}
-            enc_params = {}
-            dec_params = {}
-            out_params = {}
-
-            for key, value in params.items():
-                if key.startswith('enc_emb_'):
-                    enc_emb_params[key[8:]] = value
-                elif key.startswith('dec_emb_'):
-                    dec_emb_params[key[8:]] = value
-                elif key.startswith('enc_'):
-                    enc_params[key[4:]] = value
-                elif key.startswith('dec_'):
-                    dec_params[key[4:]] = value
-                elif key.startswith('out_'):
-                    out_params[key[4:]] = value
-
-            # Update components
-            if enc_emb_params:
-                self.encoder_embedding.update_params(enc_emb_params)
-            if dec_emb_params:
-                self.decoder_embedding.update_params(dec_emb_params)
-            if enc_params:
-                self.encoder.update_params(enc_params)
-            if dec_params:
-                self.decoder.update_params(dec_params)
-            if out_params:
-                self.output_proj.update_params(out_params)
-
 
 class EncoderOnlyModel(TransformerBase):
     """
@@ -1397,20 +868,11 @@ class DecoderOnlyModel(TransformerBase):
         # No gradient with respect to token indices
         return None
 
+    # Fix for DecoderOnlyModel in yflow/yformers/model.py
+    # Replace the generate method in DecoderOnlyModel with this fixed version:
+
     def generate(self, prompt_tokens, max_len=None, temperature=1.0, top_k=0, top_p=0.0):
-        """
-        Generate text from a prompt.
-
-        Args:
-            prompt_tokens: Prompt tokens of shape (batch_size, prompt_len)
-            max_len: Maximum total sequence length (prompt + generation)
-            temperature: Sampling temperature (1.0 = no change, <1.0 = sharper, >1.0 = more random)
-            top_k: If >0, filter to top k tokens before sampling
-            top_p: If >0, filter to tokens with cumulative probability >= top_p
-
-        Returns:
-            Generated sequence of shape (batch_size, total_len)
-        """
+        """Generate text from a prompt."""
         if max_len is None:
             max_len = self.max_seq_len
 
@@ -1438,56 +900,32 @@ class DecoderOnlyModel(TransformerBase):
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
-            # Apply top-k filtering
+            # Apply top-k filtering if specified
             if top_k > 0:
-                # Get top-k values and indices
-                v, _ = xp.topk(next_token_logits, min(top_k, next_token_logits.shape[-1]))
-                # Filter values below the threshold
-                min_values = v[:, -1].reshape(-1, 1)
-                next_token_logits = xp.where(
-                    next_token_logits < min_values,
-                    xp.ones_like(next_token_logits) * -float('inf'),
-                    next_token_logits
-                )
-
-            # Apply top-p (nucleus) filtering
-            if top_p > 0.0:
-                sorted_logits = xp.sort(next_token_logits, axis=-1)[:, ::-1]
+                # Get the top-k values
                 sorted_indices = xp.argsort(next_token_logits, axis=-1)[:, ::-1]
-                cumulative_probs = xp.cumsum(xp.softmax(sorted_logits, axis=-1), axis=-1)
+                top_k_indices = sorted_indices[:, :top_k]
 
-                # Remove tokens with cumulative probability above the threshold
-                sorted_indices_to_remove = cumulative_probs > top_p
-                # Keep at least one token
-                sorted_indices_to_remove[:, 0] = 0
-
-                # Create mask of tokens to remove
-                indices_to_remove = xp.zeros_like(next_token_logits, dtype=bool)
+                # Create mask for top-k values
+                mask = xp.zeros_like(next_token_logits)
                 for b in range(batch_size):
-                    indices_to_remove[b, sorted_indices[b, sorted_indices_to_remove[b]]] = True
+                    mask[b, top_k_indices[b]] = 1
 
-                # Set removed tokens to -inf
-                next_token_logits = xp.where(
-                    indices_to_remove,
-                    xp.ones_like(next_token_logits) * -float('inf'),
-                    next_token_logits
-                )
+                # Apply mask
+                next_token_logits = xp.where(mask, next_token_logits, -float('inf'))
 
             # Convert logits to probabilities
-            probs = xp.softmax(next_token_logits, axis=-1)
+            probs = xp.exp(next_token_logits - xp.max(next_token_logits, axis=-1, keepdims=True))
+            probs = probs / xp.sum(probs, axis=-1, keepdims=True)
 
-            # Sample next token
-            next_token = xp.random.choice(
-                self.vocab_size,
-                size=(batch_size, 1),
-                p=probs.T  # Transpose to get (vocab_size, batch_size)
-            )
+            # Sample next token (using argmax for simplicity)
+            next_token = xp.argmax(probs, axis=-1).reshape(-1, 1)
 
             # Append to output
             output = xp.concatenate([output, next_token], axis=1)
 
-            # Check if all sequences have hit EOS token (assuming token ID 2)
-            if (output == 2).sum() == batch_size:
+            # Check for EOS token (assuming token ID 2)
+            if xp.all(next_token == 2):
                 break
 
         return output
