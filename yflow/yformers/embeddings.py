@@ -2,8 +2,8 @@
 """
 Embedding implementations for transformer models.
 
-This module implements various embedding types used in transformer architectures,
-including token embeddings, positional encodings, and combinations of both.
+This module implements various embedding types used in transformer
+architectures, including token embeddings, positional encodings, and combinations of both.
 All implementations leverage YFlow's device abstraction for seamless CPU/GPU support.
 """
 
@@ -378,7 +378,9 @@ class LearnedPositionalEmbedding(Layer):
         # Accumulate gradients for positions
         batch_size = self.input.shape[0]
         for pos in range(self.seq_len):
-            self.dweight[self.start_pos + pos] = output_gradient[:, pos].sum(axis=0) / batch_size
+            # FIX: Ensure proper shape matching for gradient accumulation
+            pos_grad = output_gradient[:, pos, :]  # (batch_size, embed_dim)
+            self.dweight[self.start_pos + pos] = xp.mean(pos_grad, axis=0)  # Average over batch
 
         # Gradient for input is the same as output gradient
         return output_gradient
@@ -523,24 +525,46 @@ class PositionalEmbedding(Layer):
     def get_trainable_params(self) -> Dict:
         """Get trainable parameters from sub-layers"""
         params = {}
-        params.update(self.token_embed.get_trainable_params())
-        params.update(self.pos_embed.get_trainable_params())
+
+        # Get token embedding params with prefix
+        token_params = self.token_embed.get_trainable_params()
+        for k, v in token_params.items():
+            params[f'token_{k}'] = v
+
+        # Get positional embedding params with prefix
+        pos_params = self.pos_embed.get_trainable_params()
+        for k, v in pos_params.items():
+            params[f'pos_{k}'] = v
+
         return params
 
     def get_gradients(self) -> Dict:
         """Get parameter gradients from sub-layers"""
         grads = {}
-        grads.update(self.token_embed.get_gradients())
-        grads.update(self.pos_embed.get_gradients())
+
+        # Get token embedding gradients with prefix
+        token_grads = self.token_embed.get_gradients()
+        for k, v in token_grads.items():
+            grads[f'token_{k}'] = v
+
+        # Get positional embedding gradients with prefix
+        pos_grads = self.pos_embed.get_gradients()
+        for k, v in pos_grads.items():
+            grads[f'pos_{k}'] = v
+
         return grads
 
     def update_params(self, params: Dict):
         """Update parameters in sub-layers"""
         # Filter params for each sub-layer
-        token_params = {k: v for k, v in params.items()
-                        if k in self.token_embed.get_trainable_params()}
-        pos_params = {k: v for k, v in params.items()
-                      if k in self.pos_embed.get_trainable_params()}
+        token_params = {}
+        pos_params = {}
+
+        for key, value in params.items():
+            if key.startswith('token_'):
+                token_params[key[6:]] = value  # Remove 'token_' prefix
+            elif key.startswith('pos_'):
+                pos_params[key[4:]] = value  # Remove 'pos_' prefix
 
         # Update sub-layers
         if token_params:
