@@ -82,24 +82,41 @@ class Dense(Layer):
             return (None, None)  # Both batch size and features are flexible
         return (None, self.input_size)  # Batch size is flexible, feature size is fixed
 
+    # Fix for yflow/layers/dense.py
+    # Replace the forward method in the Dense class:
+
     def forward(self, input_data):
         """Forward pass with automatic shape handling and GPU support"""
-        # Handle 3D input from RNN/LSTM layers
-        if input_data.ndim == 3:
-            input_data = input_data[:, -1, :]  # Take the last timestep
 
         # Initialize weights if this is the first forward pass
         if self.weights is None:
-            self.input_size = input_data.shape[-1]
+            if input_data.ndim == 3:
+                # For 3D inputs (batch, seq, features), use the feature dimension
+                self.input_size = input_data.shape[-1]
+            else:
+                self.input_size = input_data.shape[-1]
             self._initialize_weights()
 
         # Ensure input is on correct device
         self.input = self.device.to_device(input_data)
 
+        # Handle 3D inputs (transformers need all timesteps, not just the last one)
+        original_shape = None
+        if self.input.ndim == 3:
+            # Store original shape and reshape to 2D for matrix multiplication
+            original_shape = self.input.shape  # (batch_size, seq_len, features)
+            batch_size, seq_len, features = original_shape
+            self.input = self.input.reshape(-1, features)  # (batch_size * seq_len, features)
+
         # Compute output using matrix multiplication
         output = self.device.xp.dot(self.input, self.weights)
         if self.use_bias:
             output = output + self.bias
+
+        # Reshape back to 3D if input was 3D
+        if original_shape is not None:
+            batch_size, seq_len, _ = original_shape
+            output = output.reshape(batch_size, seq_len, self.output_size)
 
         return output
 

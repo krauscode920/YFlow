@@ -288,6 +288,9 @@ class TransformerModel(TransformerBase):
 
         return None, None
 
+    # Fix for yflow/yformers/model.py
+    # In the TransformerModel class, replace the generate method:
+
     def generate(self, src, max_len=None, temperature=1.0, top_k=0, top_p=0.0):
         """Generate a target sequence from source sequence."""
         if max_len is None:
@@ -323,8 +326,12 @@ class TransformerModel(TransformerBase):
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
+            # Manual softmax implementation
+            exp_logits = xp.exp(next_token_logits - xp.max(next_token_logits, axis=-1, keepdims=True))
+            probs = exp_logits / xp.sum(exp_logits, axis=-1, keepdims=True)
+
             # Simple sampling (most probable token)
-            next_token = xp.argmax(xp.softmax(next_token_logits, axis=-1), axis=-1).reshape(-1, 1)
+            next_token = xp.argmax(probs, axis=-1).reshape(-1, 1)
 
             # Append to output
             output = xp.concatenate([output, next_token], axis=1)
@@ -868,8 +875,8 @@ class DecoderOnlyModel(TransformerBase):
         # No gradient with respect to token indices
         return None
 
-    # Fix for DecoderOnlyModel in yflow/yformers/model.py
-    # Replace the generate method in DecoderOnlyModel with this fixed version:
+    # Fix for yflow/yformers/model.py
+    # In the DecoderOnlyModel class, replace the generate method:
 
     def generate(self, prompt_tokens, max_len=None, temperature=1.0, top_k=0, top_p=0.0):
         """Generate text from a prompt."""
@@ -914,9 +921,9 @@ class DecoderOnlyModel(TransformerBase):
                 # Apply mask
                 next_token_logits = xp.where(mask, next_token_logits, -float('inf'))
 
-            # Convert logits to probabilities
-            probs = xp.exp(next_token_logits - xp.max(next_token_logits, axis=-1, keepdims=True))
-            probs = probs / xp.sum(probs, axis=-1, keepdims=True)
+            # Manual softmax implementation (numerically stable)
+            exp_logits = xp.exp(next_token_logits - xp.max(next_token_logits, axis=-1, keepdims=True))
+            probs = exp_logits / xp.sum(exp_logits, axis=-1, keepdims=True)
 
             # Sample next token (using argmax for simplicity)
             next_token = xp.argmax(probs, axis=-1).reshape(-1, 1)

@@ -306,19 +306,35 @@ class MultiHeadAttention(Layer):
         # Transpose to (batch_size, num_heads, seq_len, head_dim)
         return xp.transpose(x, (0, 2, 1, 3))
 
+    # Fix for yflow/yformers/attention.py
+    # Replace the _combine_heads method in MultiHeadAttention class:
+
     def _combine_heads(self, x, batch_size):
         """
         Reverse of split_heads
-        x shape: (batch_size, num_heads, seq_len, head_dim)
-        returns: (batch_size, seq_len, embed_dim)
+        Expected input: (batch_size, num_heads, seq_len, head_dim)
+        Returns: (batch_size, seq_len, embed_dim)
+
+        Handles cases where an extra dimension might be added due to broadcasting.
         """
         xp = self.device.xp
+
+        # Handle case where broadcasting adds an extra dimension
+        if len(x.shape) == 5:
+            # Shape is (batch_size, 1, num_heads, seq_len, head_dim)
+            # Remove the extra dimension
+            x = x.squeeze(1)  # Now (batch_size, num_heads, seq_len, head_dim)
+
+        # Check if we have the expected 4D tensor
+        if len(x.shape) != 4:
+            raise ValueError(f"Expected 4D tensor for _combine_heads, got shape {x.shape}")
 
         # Transpose to (batch_size, seq_len, num_heads, head_dim)
         x = xp.transpose(x, (0, 2, 1, 3))
 
         # Reshape to (batch_size, seq_len, embed_dim)
-        return x.reshape(batch_size, -1, self.embed_dim)
+        seq_len = x.shape[1]
+        return x.reshape(batch_size, seq_len, self.embed_dim)
 
     def _apply_mask(self, attention_scores, mask):
         """Apply mask to attention scores"""
