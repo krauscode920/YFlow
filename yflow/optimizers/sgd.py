@@ -99,3 +99,33 @@ class SGD:
     def zero_grad(self):
         """Reset velocities"""
         self.velocities = {}
+
+
+    def get_state(self):
+        """
+        Get optimizer state for checkpointing.
+
+        Returns:
+            Dictionary containing optimizer state
+        """
+        state = {
+            'config': self.config.copy(),
+            'velocities': {k: self.device.to_cpu(v) for k, v in self.velocities.items()}
+        }
+
+        return state
+
+    def set_state(self, state):
+        """
+        Restore optimizer state from checkpoint.
+
+        Args:
+            state: Dictionary containing optimizer state
+        """
+        # Restore config
+        if 'config' in state:
+            self.config.update(state['config'])
+
+        # Restore velocities
+        self.velocities = {k: self.device.to_device(v)
+                           for k, v in state.get('velocities', {}).items()}

@@ -154,3 +154,48 @@ class Adam:
         if self.config['amsgrad']:
             self.v_hat = {}
         self.t = 0
+
+
+    def get_state(self):
+        """
+        Get optimizer state for checkpointing.
+
+        Returns:
+            Dictionary containing optimizer state
+        """
+        state = {
+            'config': self.config.copy(),
+            't': self.t,
+            'm': {k: self.device.to_cpu(v) for k, v in self.m.items()},
+            'v': {k: self.device.to_cpu(v) for k, v in self.v.items()}
+        }
+
+        # Save v_hat if using AMSGrad
+        if self.config['amsgrad'] and self.v_hat is not None:
+            state['v_hat'] = {k: self.device.to_cpu(v) for k, v in self.v_hat.items()}
+
+        return state
+
+    def set_state(self, state):
+        """
+        Restore optimizer state from checkpoint.
+
+        Args:
+            state: Dictionary containing optimizer state
+        """
+        # Restore config
+        if 'config' in state:
+            self.config.update(state['config'])
+
+        # Restore timestep
+        self.t = state.get('t', 0)
+
+        # Restore moment estimates
+        self.m = {k: self.device.to_device(v) for k, v in state.get('m', {}).items()}
+        self.v = {k: self.device.to_device(v) for k, v in state.get('v', {}).items()}
+
+        # Restore v_hat if using AMSGrad
+        if 'v_hat' in state and self.config['amsgrad']:
+            if self.v_hat is None:
+                self.v_hat = {}
+            self.v_hat = {k: self.device.to_device(v) for k, v in state['v_hat'].items()}

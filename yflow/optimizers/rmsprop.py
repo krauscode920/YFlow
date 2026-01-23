@@ -122,3 +122,54 @@ class RMSprop:
             self.g = {}
         if self.config['momentum'] > 0:
             self.momentum_buffer = {}
+
+
+    def get_state(self):
+        """
+        Get optimizer state for checkpointing.
+
+        Returns:
+            Dictionary containing optimizer state
+        """
+        state = {
+            'config': self.config.copy(),
+            'v': {k: self.device.to_cpu(v) for k, v in self.v.items()}
+        }
+
+        # Save g if using centered RMSprop
+        if self.config['centered'] and self.g is not None:
+            state['g'] = {k: self.device.to_cpu(v) for k, v in self.g.items()}
+
+        # Save momentum buffer if using momentum
+        if self.config['momentum'] > 0 and self.momentum_buffer is not None:
+            state['momentum_buffer'] = {k: self.device.to_cpu(v)
+                                        for k, v in self.momentum_buffer.items()}
+
+        return state
+
+    def set_state(self, state):
+        """
+        Restore optimizer state from checkpoint.
+
+        Args:
+            state: Dictionary containing optimizer state
+        """
+        # Restore config
+        if 'config' in state:
+            self.config.update(state['config'])
+
+        # Restore moving average of squared gradients
+        self.v = {k: self.device.to_device(v) for k, v in state.get('v', {}).items()}
+
+        # Restore g if using centered RMSprop
+        if 'g' in state and self.config['centered']:
+            if self.g is None:
+                self.g = {}
+            self.g = {k: self.device.to_device(v) for k, v in state['g'].items()}
+
+        # Restore momentum buffer if using momentum
+        if 'momentum_buffer' in state and self.config['momentum'] > 0:
+            if self.momentum_buffer is None:
+                self.momentum_buffer = {}
+            self.momentum_buffer = {k: self.device.to_device(v)
+                                    for k, v in state['momentum_buffer'].items()}

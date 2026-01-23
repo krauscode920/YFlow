@@ -189,3 +189,121 @@ class Model:
 
         print("\nTotal Parameters:", f"{total_params:,}")
         print("=" * 50)
+
+    def save(self, filepath: str, optimizer=None, epoch=None, step=None,
+             loss=None, metrics=None, **kwargs):
+        """
+        Save model to file (convenience wrapper around checkpoint system).
+
+        Args:
+            filepath: Path to save model (will add .npz if not present)
+            optimizer: Optional optimizer to save
+            epoch: Current epoch number
+            step: Current training step
+            loss: Current loss value
+            metrics: Dictionary of metrics
+            **kwargs: Additional metadata
+
+        Example:
+            >>> model = Model()
+            >>> optimizer = Adam()
+            >>> model.save('my_model.npz', optimizer=optimizer, epoch=10, loss=2.5)
+        """
+        from ..checkpoint import save_checkpoint
+
+        save_checkpoint(
+            filepath=filepath,
+            model=self,
+            optimizer=optimizer,
+            epoch=epoch,
+            step=step,
+            loss=loss,
+            metrics=metrics,
+            **kwargs
+        )
+        print(f"✅ Model saved to: {filepath}")
+
+    def load(self, filepath: str, optimizer=None, load_optimizer=True):
+        """
+        Load model from file (convenience wrapper around checkpoint system).
+
+        Args:
+            filepath: Path to load model from
+            optimizer: Optional optimizer to restore state to
+            load_optimizer: Whether to load optimizer state if available
+
+        Returns:
+            Dictionary with metadata (epoch, step, loss, etc.)
+
+        Example:
+            >>> model = Model()
+            >>> optimizer = Adam()
+            >>> metadata = model.load('my_model.npz', optimizer=optimizer)
+            >>> start_epoch = metadata.get('epoch', 0)
+        """
+        from ..checkpoint import load_checkpoint
+        import os
+
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file not found: {filepath}")
+
+        # Load checkpoint
+        checkpoint = load_checkpoint(filepath)
+
+        # Restore model parameters
+        if 'model_parameters' in checkpoint:
+            self.set_parameters(checkpoint['model_parameters'])
+
+        # Restore optimizer state if requested
+        if load_optimizer and optimizer is not None and 'optimizer_state' in checkpoint:
+            if hasattr(optimizer, 'set_state'):
+                optimizer.set_state(checkpoint['optimizer_state'])
+            else:
+                print("⚠️  Optimizer does not have set_state() method")
+
+        print(f"✅ Model loaded from: {filepath}")
+
+        # Return metadata
+        return checkpoint.get('metadata', {})
+
+    def get_parameters(self):
+        """
+        Get all model parameters as a dictionary.
+
+        Returns:
+            Dictionary mapping parameter names to values
+        """
+        params = {}
+
+        for i, layer in enumerate(self.layers):
+            if hasattr(layer, 'get_trainable_params'):
+                layer_params = layer.get_trainable_params()
+                for key, value in layer_params.items():
+                    params[f'layer_{i}_{key}'] = value
+
+        return params
+
+    def set_parameters(self, params):
+        """
+        Set model parameters from a dictionary.
+
+        Args:
+            params: Dictionary mapping parameter names to values
+        """
+        # Group parameters by layer
+        layer_params = [dict() for _ in range(len(self.layers))]
+
+        for key, value in params.items():
+            if key.startswith('layer_'):
+                # Extract layer index and parameter name
+                parts = key.split('_', 2)
+                if len(parts) >= 3:
+                    layer_idx = int(parts[1])
+                    param_name = parts[2]
+                    if 0 <= layer_idx < len(self.layers):
+                        layer_params[layer_idx][param_name] = value
+
+        # Update layers
+        for i, layer in enumerate(self.layers):
+            if layer_params[i] and hasattr(layer, 'update_params'):
+                layer.update_params(layer_params[i])

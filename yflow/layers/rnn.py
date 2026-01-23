@@ -1,3 +1,5 @@
+
+
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union, Any
 from ..core.layer import Layer, _set_global_seed
@@ -77,6 +79,69 @@ class YQuence(Layer):
         self.hidden_state = None
         self.gradient_tracker = GradientTracker(gradient_clipping)
         self.cache = {}
+
+    def get_expected_input_shape(self) -> tuple:
+        """
+        Get expected input shape with None for flexible dimensions.
+
+        YQuence expects 3D input: (batch_size, seq_len, features)
+
+        Returns:
+            Tuple representing expected input shape
+        """
+        if self.config['input_size'] is None:
+            # If input_size not set yet, return fully flexible 3D shape
+            return (None, None, None)
+
+        if self.config['batch_first']:
+            return (None, None, self.config['input_size'])  # (batch_size, seq_length, features)
+        else:
+            return (None, None, self.config['input_size'])  # (seq_length, batch_size, features)
+
+    def compute_output_shape(self, input_shape: tuple) -> tuple:
+        """
+        Compute output shape given input shape.
+
+        Args:
+            input_shape: Input shape tuple (batch_size, seq_len, input_size)
+
+        Returns:
+            Output shape tuple
+        """
+        batch_size = input_shape[0]
+        seq_len = input_shape[1]
+
+        if self.config['return_sequences']:
+            # Return full sequence: (batch_size, seq_len, output_size)
+            return (batch_size, seq_len, self.config['output_size'])
+        else:
+            # Return only last output: (batch_size, output_size)
+            return (batch_size, self.config['output_size'])
+
+    def _infer_shapes(self, input_shape: Tuple[int, int, int]):
+        """
+        Infer and set input_size, hidden_size, and output_size from input shape.
+
+        Args:
+            input_shape: Shape of input tensor (batch_size, seq_len, input_size) or
+                        (seq_len, batch_size, input_size) depending on batch_first
+        """
+        if self.config['batch_first']:
+            batch_size, seq_len, input_size = input_shape
+        else:
+            seq_len, batch_size, input_size = input_shape
+
+        # Set input_size if not provided
+        if self.config['input_size'] is None:
+            self.config['input_size'] = input_size
+
+        # Set hidden_size to input_size if not provided
+        if self.config['hidden_size'] is None:
+            self.config['hidden_size'] = input_size
+
+        # Set output_size to hidden_size if not provided
+        if self.config['output_size'] is None:
+            self.config['output_size'] = self.config['hidden_size']
 
     def _prepare_sequences(self, sequences: Union[np.ndarray, List[np.ndarray]]) -> Tuple[
         Union[np.ndarray, 'cp.ndarray'], Union[np.ndarray, 'cp.ndarray']]:
@@ -298,6 +363,25 @@ class YQuence(Layer):
 
         return next_layer_grad.transpose(1, 0, 2) if self.config['batch_first'] else next_layer_grad
 
+    def _regularization_gradient(self, weights: Union[np.ndarray, 'cp.ndarray']) -> Union[np.ndarray, 'cp.ndarray']:
+        """
+        Calculate regularization gradient for given weights.
+
+        Args:
+            weights: Weight matrix to regularize
+
+        Returns:
+            Regularization gradient
+        """
+        xp = self.device.xp
+
+        if self.config['regularization'] == 'l2':
+            return self.config['reg_strength'] * 2 * weights
+        elif self.config['regularization'] == 'l1':
+            return self.config['reg_strength'] * xp.sign(weights)
+        else:
+            return 0
+
     def _validate_config(self):
         """Validate configuration parameters"""
         super()._validate_config()
@@ -325,7 +409,29 @@ class YQuence(Layer):
         """Return current mask if any"""
         return self.mask
 
+    def get_trainable_params(self) -> Dict[str, Union[np.ndarray, 'cp.ndarray']]:
+        """Get trainable parameters for the layer"""
+        return {
+            'W_x': self.W_x,
+            'W_h': self.W_h,
+            'W_y': self.W_y,
+            'b_h': self.b_h,
+            'b_y': self.b_y
+        }
 
+    def get_gradients(self) -> Dict[str, Union[np.ndarray, 'cp.ndarray']]:
+        """Get parameter gradients"""
+        return self.gradients
+
+    def update_params(self, params: Dict[str, Union[np.ndarray, 'cp.ndarray']]):
+        """Update layer parameters"""
+        for name, param in params.items():
+            if hasattr(self, name):
+                setattr(self, name, self.device.to_device(param))
+
+    def get_config(self) -> dict:
+        """Get layer configuration"""
+        return self.config.copy()
 class BiYQuence(Layer):
     """
     Bidirectional wrapper for YQuence layer with GPU support and improved gradient flow.
