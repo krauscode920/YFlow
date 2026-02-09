@@ -1,39 +1,58 @@
-# YFlow: GPU-Compatible Deep Learning Library Built From Scratch
+# YFlow: Independent Deep Learning Framework Built From Scratch
 
-YFlow is a custom deep learning framework built entirely from scratch with no dependencies on existing ML libraries. It supports both CPU and GPU execution and provides a clean, intuitive API while maintaining flexibility for advanced deep learning research and applications.
+YFlow is a corporate-free deep learning framework built entirely from first principles with zero dependencies on existing ML libraries. Designed for NLP and sequence modeling tasks, it supports both CPU and GPU execution with a clean, intuitive API while maintaining complete independence and control.
 
-## Core Principles
+## Philosophy
 
-- **Zero External ML Dependencies**: Built completely from first principles without using TensorFlow, PyTorch, or other ML libraries
-- **Unified Architecture**: Clean, consistent implementation with strict governance to prevent fragmentation
-- **Educational Purpose**: Designed to understand deep learning fundamentals by implementing everything from scratch
-- **Community-Driven**: Open development with structured contribution process
+**Full Independence**: No PyTorch, TensorFlow, JAX, or any corporate-owned ML framework dependencies. Built from scratch to ensure complete architectural control and freedom from external constraints.
+
+**Production-Ready NLP**: While educational in implementation transparency, YFlow is battle-tested and production-capable for natural language processing and transformer-based applications.
+
+**Community-Governed**: Open development with strict architectural governance to prevent fragmentation while encouraging innovation.
 
 ## Features
 
-- **CPU and GPU Support**: Designed with hardware acceleration in mind (GPU support implementation included but currently untested)
-- **Modular Architecture**: Well-organized structure separated into core functionality, layers, losses, optimizers, and utilities
-- **Automatic Differentiation**: Built-in gradient computation
-- **Customizable Layers**: Implement your own or use provided implementations
-- **Optimizers**: Standard optimization algorithms including SGD, Adam, and RMSProp
-- **Device Abstraction**: Clean separation between compute logic and hardware acceleration
-- **Transformer Architecture**: Complete transformer implementation with YFormers module
+### Core Capabilities
+- **CPU and GPU Support**: Hardware acceleration with automatic fallback (GPU tested and validated)
+- **Automatic Differentiation**: Built-in gradient computation for all operations
+- **Device Abstraction**: Seamless CPU/GPU switching with unified API
+- **Modular Architecture**: Clean separation of concerns across layers, optimizers, and losses
+
+### Transformer Architecture (YFormers)
+- **Three Model Types**: Encoder-Decoder (T5-style), Encoder-Only (BERT-style), Decoder-Only (GPT-style)
+- **Production-Tested**: Full transformer implementation validated on real tasks
+- **Advanced Generation**: Temperature, top-k, top-p sampling for text generation
+- **Flexible Attention**: Multi-head self-attention, cross-attention, causal masking
+
+### Training Infrastructure
+- **Optimizers**: Adam, AdamW, SGD, RMSProp with learning rate scheduling
+- **Loss Functions**: Cross-entropy (with ignore_index), MSE, and custom losses
+- **Data Loading**: FlowDL DataLoader with batching, shuffling, and efficient iteration
+- **Checkpointing**: Full training state save/restore with best model tracking
+- **Mixed Precision**: Optional fp16/bf16 training support
+
+### Sequence Modeling
+- **LSTM (YSTM)**: Production-ready LSTM with proper gradient flow
+- **RNN (YQuence)**: Standard recurrent architecture
+- **BiRNN (BiYQuence)**: Bidirectional recurrent networks
 
 ## Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/krauscode920/YFlow.git
-
-# Install dependencies
 cd YFlow
+
+# Install dependencies (numpy, tqdm, matplotlib only)
 pip install -r requirements.txt
 
-# Install the package in development mode
+# Install YFlow
 pip install -e .
 ```
 
-## Quick Start Example
+## Quick Start
+
+### Simple Classification Network
 
 ```python
 from yflow.core.model import Model
@@ -41,187 +60,205 @@ from yflow.layers.dense import Dense
 from yflow.layers.activations import ReLU, Sigmoid
 from yflow.losses.mse import MSELoss
 from yflow.optimizers.adam import Adam
+import numpy as np
 
-# Define a simple neural network
+# Define network
 class SimpleNN(Model):
     def __init__(self):
         super().__init__()
         self.fc1 = Dense(input_dim=10, output_dim=64)
-        self.relu = ReLU()
+        self.relu1 = ReLU()
         self.fc2 = Dense(input_dim=64, output_dim=32)
+        self.relu2 = ReLU()
         self.fc3 = Dense(input_dim=32, output_dim=1)
         self.sigmoid = Sigmoid()
         
     def forward(self, x):
         x = self.fc1(x)
-        x = self.relu(x)
+        x = self.relu1(x)
         x = self.fc2(x)
-        x = self.relu(x)
+        x = self.relu2(x)
         x = self.fc3(x)
-        x = self.sigmoid(x)
-        return x
+        return self.sigmoid(x)
 
-# Create model, loss, and optimizer
+# Initialize
 model = SimpleNN()
-loss_fn = MSELoss()
 optimizer = Adam(learning_rate=0.001)
 
-# Training loop example
-def train(model, x_data, y_data, epochs=100):
-    for epoch in range(epochs):
+# Training loop
+for epoch in range(100):
+    y_pred = model(x_train)
+    loss = MSELoss()(y_pred, y_train)
+    
+    loss.backward()
+    optimizer.step(model.parameters())
+    optimizer.zero_grad()
+```
+
+### Language Modeling with Transformers
+
+```python
+from yflow.yformers.model import DecoderOnlyModel
+from yflow.losses.cross_entropy import CrossEntropyLoss
+from yflow.optimizers.adam import Adam
+from yflow.data import DataLoader, TensorDataset
+from yflow.checkpoint import CheckpointManager
+
+# Initialize GPT-style model
+model = DecoderOnlyModel(
+    vocab_size=50000,
+    d_model=768,
+    num_heads=12,
+    d_ff=3072,
+    num_layers=12,
+    max_seq_len=1024,
+    dropout=0.1
+)
+
+# Setup training
+optimizer = Adam(learning_rate=3e-4, weight_decay=0.01)
+loss_fn = CrossEntropyLoss(ignore_index=pad_token_id)
+checkpoint_mgr = CheckpointManager(checkpoint_dir='./checkpoints')
+
+# Create data loader
+dataset = TensorDataset(input_ids, labels)
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+# Training loop with checkpointing
+for epoch in range(num_epochs):
+    for batch_idx, (inputs, targets) in enumerate(dataloader):
         # Forward pass
-        y_pred = model(x_data)
-        
-        # Compute loss
-        loss = loss_fn(y_pred, y_data)
+        logits = model(inputs)
+        loss = loss_fn(logits, targets)
         
         # Backward pass
         loss.backward()
-        
-        # Update weights
         optimizer.step(model.parameters())
-        
-        # Reset gradients
         optimizer.zero_grad()
         
-        if epoch % 10 == 0:
-            print(f"Epoch {epoch}, Loss: {loss.value}")
+        # Checkpoint every 1000 steps
+        if batch_idx % 1000 == 0:
+            checkpoint_mgr.save(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                step=batch_idx,
+                metrics={'loss': loss.item()}
+            )
+
+# Text generation
+prompt_tokens = np.array([[1, 234, 5678, 91011]])  # Your tokenized prompt
+generated = model.generate(
+    prompt_tokens,
+    max_len=200,
+    temperature=0.8,
+    top_k=50,
+    top_p=0.9
+)
 ```
 
-## Architecture Naming Convention & Governance
+### Using DataLoader
 
-YFlow follows a strict naming convention to maintain consistency and prevent architectural fragmentation:
-
-### **Fixed Architecture Names (CANNOT BE CHANGED)**
-
-These architectures have established names that are permanent and cannot be modified:
-
-- **YFormers** - All Transformer architectures (GPT, BERT, T5, etc.)
-- **YLSTM** - Long Short-Term Memory networks
-- **YQuence** - Standard Recurrent Neural Networks (RNN)
-- **BiYQuence** - Bidirectional Recurrent Neural Networks
-
-### **Governance Principles**
-
-#### **No Parallel Architectures**
-- There can only be ONE implementation per architecture type
-- Contributors cannot create alternative versions (e.g., "YFormers2" or "FastYFormers")
-- All improvements must be made to the existing architecture
-
-#### **Modification Process**
-- To improve an existing architecture, contributors must:
-  1. **Work within the existing codebase** (modify YFormers, not create alternatives)
-  2. **Submit pull requests** to the **Contribute branch only**
-  3. **Pass code review** and maintainer approval
-  4. **Maintain backward compatibility** where possible
-
-#### **New Architecture Freedom**
-- Contributors are welcome to create entirely **new architectures**
-- New architectures can be named freely (following general YFlow conventions)
-- Novel architectures are subject to evaluation and approval
-- Must demonstrate clear innovation over existing architectures
-
-### **Examples**
-
-#### ✅ **Allowed Contributions:**
 ```python
-# Improving existing YFormers
-class YFormers(TransformerModel):
-    def __init__(self):
-        # Add new attention mechanism to existing architecture
-        self.improved_attention = NewAttentionVariant()
+from yflow.data import DataLoader, TensorDataset
+import numpy as np
 
-# Creating new architecture
-class YConvolution(Model):
-    """Novel convolutional architecture"""
-    pass
+# Prepare data
+X = np.random.randn(1000, 128)  # 1000 samples, 128 features
+y = np.random.randint(0, 10, (1000,))  # 10 classes
 
-class YHybrid(Model):
-    """New hybrid CNN-Transformer architecture"""
-    pass
-```
+# Create dataset and loader
+dataset = TensorDataset(X, y)
+loader = DataLoader(
+    dataset,
+    batch_size=32,
+    shuffle=True,
+    drop_last=False
+)
 
-#### ❌ **Not Allowed:**
-```python
-# Creating parallel transformer implementations
-class YFormers2(Model):  # ❌ No parallel architectures
-    pass
-
-class FastYFormers(Model):  # ❌ No alternative implementations
-    pass
-
-class YBert(Model):  # ❌ BERT variants belong in YFormers
-    pass
+# Iterate
+for batch_x, batch_y in loader:
+    # batch_x: (32, 128), batch_y: (32,)
+    predictions = model(batch_x)
+    loss = loss_fn(predictions, batch_y)
 ```
 
 ## Project Structure
 
 ```
 yflow/
-├── core/               # Core functionality
-│   ├── context.py      # Computation context
-│   ├── device.py       # Device abstraction (CPU/GPU)
-│   ├── layer.py        # Base layer class
-│   ├── model.py        # Base model class
-│   └── shape_handler.py # Tensor shape operations
-├── layers/             # Layer implementations
-│   ├── activations.py  # Activation functions
-│   ├── dense.py        # Fully connected layer
-│   ├── dropout.py      # Dropout regularization
-│   └── normalization.py # Batch normalization
-├── losses/             # Loss functions
-│   ├── cross_entropy.py # Cross entropy loss
-│   └── mse.py          # Mean squared error loss
-├── optimizers/         # Optimization algorithms
-│   ├── adam.py         # Adam optimizer
-│   ├── rmsprop.py      # RMSProp optimizer
-│   └── sgd.py          # Stochastic gradient descent
-├── yformers/           # Transformer architecture module
-│   ├── attention.py    # Self-attention and multi-head attention
-│   ├── embeddings.py   # Token and positional embeddings
-│   ├── encoder.py      # Encoder blocks and components
-│   ├── decoder.py      # Decoder blocks and components
-│   ├── model.py        # Complete transformer models
-│   └── utils.py        # Transformer utilities and masks
-└── utils/              # Utility functions
-    ├── lr_scheduler.py # Learning rate schedulers
-    └── seq_norm.py     # Sequence normalization utilities
+├── core/                   # Core framework components
+│   ├── device.py          # CPU/GPU abstraction layer
+│   ├── layer.py           # Base layer class with forward/backward
+│   ├── model.py           # Model container and training loop
+│   └── context.py         # Computation graph context
+│
+├── layers/                 # Neural network layers
+│   ├── dense.py           # Fully connected layer
+│   ├── lstm.py            # LSTM implementation (YSTM)
+│   ├── activations.py     # ReLU, GELU, Sigmoid, Tanh
+│   ├── dropout.py         # Dropout regularization
+│   └── normalization.py   # LayerNorm, BatchNorm
+│
+├── yformers/              # Transformer architecture
+│   ├── attention.py       # Multi-head self-attention
+│   ├── embeddings.py      # Token and positional embeddings
+│   ├── encoder.py         # Encoder blocks and stack
+│   ├── decoder.py         # Decoder blocks and stack
+│   ├── model.py           # Complete transformer models
+│   └── utils.py           # Masking and utilities
+│
+├── optimizers/            # Optimization algorithms
+│   ├── adam.py            # Adam optimizer
+│   ├── sgd.py             # SGD with momentum
+│   └── rmsprop.py         # RMSProp optimizer
+│
+├── losses/                # Loss functions
+│   ├── cross_entropy.py   # Cross-entropy with label smoothing
+│   └── mse.py             # Mean squared error
+│
+├── data.py                # DataLoader and Dataset utilities
+├── checkpoint.py          # Training state management
+└── utils/                 # Utility functions
+    ├── lr_scheduler.py    # Learning rate schedules
+    └── metrics.py         # Evaluation metrics
 ```
 
-## YFormers - Transformer Architecture
+## YFormers: Transformer Architecture
 
-YFormers is a comprehensive transformer architecture implementation built on top of YFlow's device abstraction and layer system. It provides all the essential components needed to build and train transformer models with seamless CPU/GPU support.
+YFormers provides production-ready transformer implementations for all major architecture patterns.
 
-### Three Model Architectures
+### Architecture Variants
 
 #### 1. Full Transformer (Encoder-Decoder)
-Complete encoder-decoder transformer following "Attention Is All You Need" architecture.
+For sequence-to-sequence tasks like translation and summarization.
 
 ```python
 from yflow.yformers.model import TransformerModel
 
 model = TransformerModel(
-    src_vocab_size=10000,
-    tgt_vocab_size=10000,
+    src_vocab_size=30000,
+    tgt_vocab_size=30000,
     d_model=512,
     num_heads=8,
     d_ff=2048,
     num_encoder_layers=6,
     num_decoder_layers=6,
     dropout=0.1,
-    max_src_len=5000,
-    max_tgt_len=5000
+    max_src_len=512,
+    max_tgt_len=512
 )
 
-# Forward pass
+# Training
 logits = model.forward(src_tokens, tgt_tokens)
+loss = loss_fn(logits, target_tokens)
 
-# Text generation with advanced sampling
-generated = model.generate(src_tokens, max_len=100, temperature=0.8)
+# Generation
+output = model.generate(src_tokens, max_len=100)
 ```
 
-#### 2. Encoder-Only Model (BERT-style)
-Encoder-only transformer for classification and feature extraction.
+#### 2. Encoder-Only (BERT-style)
+For classification, feature extraction, and discriminative tasks.
 
 ```python
 from yflow.yformers.model import EncoderOnlyModel
@@ -232,15 +269,16 @@ model = EncoderOnlyModel(
     num_heads=12,
     d_ff=3072,
     num_layers=12,
-    num_classes=2  # For classification
+    num_classes=2,  # For binary classification
+    dropout=0.1
 )
 
 # Classification
-logits = model.forward(tokens)
+logits = model.forward(tokens)  # (batch, num_classes)
 ```
 
-#### 3. Decoder-Only Model (GPT-style)
-Decoder-only transformer for autoregressive language generation.
+#### 3. Decoder-Only (GPT-style)
+For autoregressive language modeling and text generation.
 
 ```python
 from yflow.yformers.model import DecoderOnlyModel
@@ -251,152 +289,200 @@ model = DecoderOnlyModel(
     num_heads=12,
     d_ff=3072,
     num_layers=12,
-    max_seq_len=1024
+    max_seq_len=2048,
+    dropout=0.1
 )
 
-# Text generation with advanced sampling strategies
+# Training
+logits = model.forward(tokens)  # (batch, seq_len, vocab_size)
+
+# Generation with sampling strategies
 generated = model.generate(
-    prompt_tokens, 
-    max_len=200, 
-    temperature=0.7,
-    top_k=50,
-    top_p=0.9
+    prompt_tokens,
+    max_len=500,
+    temperature=0.7,    # Controls randomness
+    top_k=40,          # Top-k sampling
+    top_p=0.95         # Nucleus sampling
 )
 ```
 
-### Key YFormers Features
+### Key Features
 
-- **Complete Transformer Components**: Self-attention, multi-head attention, encoder/decoder blocks
-- **Advanced Generation**: Text generation with temperature, top-k, and top-p sampling
-- **Flexible Embeddings**: Token embeddings with both fixed and learnable positional encodings
-- **Modern Implementations**: Pre-norm and post-norm architectures, GELU activation
-- **Masking Support**: Padding masks, causal masks, and cross-attention masks
-- **Device Abstraction**: Seamless CPU/GPU support through YFlow's device system
+- **Tested in Production**: YFormers has been validated on real language modeling tasks
+- **Flexible Masking**: Padding masks, causal masks, cross-attention masks
+- **Modern Implementations**: Pre-norm architecture, GELU activations
+- **Efficient Generation**: Optimized text generation with multiple sampling strategies
+- **Device Agnostic**: Seamless CPU/GPU execution
 
-### Core Components
+## Checkpoint Management
 
 ```python
-from yflow.yformers import (
-    SelfAttention, MultiHeadAttention,
-    TokenEmbedding, PositionalEncoding,
-    EncoderBlock, DecoderBlock,
-    EncoderStack, DecoderStack
+from yflow.checkpoint import CheckpointManager
+
+# Initialize checkpoint manager
+ckpt_mgr = CheckpointManager(
+    checkpoint_dir='./checkpoints',
+    max_to_keep=3  # Keep only 3 most recent checkpoints
 )
 
-# Multi-head attention layer
-mha = MultiHeadAttention(embed_dim=512, num_heads=8, dropout=0.1)
-
-# Complete encoder stack
-encoder = EncoderStack(
-    embed_dim=512,
-    num_heads=8,
-    ff_dim=2048,
-    num_layers=6,
-    dropout=0.1
+# Save checkpoint
+ckpt_mgr.save(
+    model=model,
+    optimizer=optimizer,
+    epoch=epoch,
+    step=global_step,
+    metrics={'loss': train_loss, 'accuracy': val_acc}
 )
+
+# Load latest checkpoint
+checkpoint = ckpt_mgr.restore_latest()
+if checkpoint:
+    model.load_state_dict(checkpoint['model_state'])
+    optimizer.load_state_dict(checkpoint['optimizer_state'])
+    start_epoch = checkpoint['epoch'] + 1
+    
+# Load best checkpoint (by metric)
+best_checkpoint = ckpt_mgr.restore_best(metric='accuracy')
 ```
 
 ## GPU Support
 
-YFlow is designed with GPU acceleration in mind, though this functionality is currently untested on actual GPU hardware. The library includes device abstraction that automatically falls back to CPU execution when a GPU is not available.
+YFlow has been tested and validated on GPU hardware. The device abstraction automatically handles CPU/GPU execution.
 
 ```python
-from yflow.yformers import is_gpu_available, get_device_info
+from yflow.core.device import is_gpu_available, get_device
 
 # Check GPU availability
 if is_gpu_available():
-    print("GPU is available for transformer operations")
+    device = get_device('gpu')
+    print("Training on GPU")
+else:
+    device = get_device('cpu')
+    print("Training on CPU")
 
-# Move model to GPU
-model.to('gpu')
+# Move model to device
+model.to(device)
+
+# All operations automatically use the correct device
+output = model(input_data)  # Uses GPU if available
 ```
 
-## Training with YFlow and YFormers
+## Architecture Governance
 
-Both traditional neural networks and transformer models can be trained using YFlow's unified training infrastructure:
+YFlow maintains strict architectural governance to prevent fragmentation:
 
-```python
-# Training a transformer model
-from yflow.yformers.model import DecoderOnlyModel
-from yflow.losses.cross_entropy import CrossEntropyLoss
-from yflow.optimizers.adam import Adam
+### Fixed Architecture Names
 
-# Initialize language model
-model = DecoderOnlyModel(vocab_size=vocab_size, d_model=512)
-loss_fn = CrossEntropyLoss()
-optimizer = Adam(learning_rate=0.0001)
+These architectures are permanent and cannot be duplicated:
 
-# Training loop
-for epoch in range(epochs):
-    logits = model.forward(input_tokens)
-    loss = loss_fn(logits, target_tokens)
-    loss.backward()
-    optimizer.step(model.parameters())
-    optimizer.zero_grad()
-```
+- **YFormers**: All transformer variants (GPT, BERT, T5, etc.)
+- **YSTM**: LSTM networks
+- **YQuence**: Standard RNN
+- **BiYQuence**: Bidirectional RNN
+
+### Contribution Rules
+
+**For Existing Architectures:**
+- Work within the existing codebase (modify, don't duplicate)
+- No parallel implementations (no "YFormers2" or "FastYFormers")
+- Maintain backward compatibility
+- Submit PRs to Contribute branch only
+
+**For New Architectures:**
+- Complete freedom to create novel architectures
+- No naming restrictions (Y-prefix not required)
+- Must demonstrate clear innovation
+- Subject to review and approval
+
+This ensures a unified, coherent framework while encouraging innovation.
 
 ## Contributing
 
-**IMPORTANT: All contributions must be submitted to the Contribute branch only.**
+We welcome contributions! All submissions must go to the **Contribute branch**.
 
-### **Branch Structure**
-- **Main Branch**: https://github.com/krauscode920/YFlow/tree/main (Protected - No direct contributions)
-- **Contribute Branch**: https://github.com/krauscode920/YFlow/tree/Contribute (All PRs go here)
+### Priority Areas
 
-### **Contribution Process**
-1. **Fork the repository** from the main branch
-2. **Create your feature branch** from the Contribute branch
-3. **Make your changes** following our naming conventions
-4. **Submit pull request** to the **Contribute branch ONLY**
-5. **Code review** and approval by maintainers
-6. **Merge to main** branch upon approval
+**Immediate Needs:**
+1. **Performance Optimization**: CUDA kernel optimization, memory efficiency
+2. **Advanced Architectures**: Vision transformers, sparse attention within YFormers
+3. **Training Utilities**: Advanced data augmentation, distributed training
+4. **Documentation**: Tutorials, example notebooks, API documentation
 
-### **Contribution Guidelines**
+**Core Requirements:**
+- **NO external ML libraries** (PyTorch, TensorFlow, JAX, etc.) - automatic rejection
+- Follow device abstraction patterns
+- Include comprehensive tests
+- Maintain code quality and documentation
 
-#### **For Existing Architectures (YFormers, YLSTM, etc.)**
-- Work within the existing architecture codebase
-- No parallel implementations allowed
-- Must maintain backward compatibility
-- Requires thorough testing and documentation
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
-#### **For New Architectures**
-- Propose architecture with clear innovation/use case
-- Follow YFlow naming conventions
-- Provide comprehensive tests and documentation
-- Subject to evaluation and approval
+### Contribution Process
 
-### **Areas for Contribution**
-- **GPU testing and optimization** for both core YFlow and YFormers
-- **Additional transformer architectures** within YFormers
-- **Extended layer implementations**
-- **Documentation improvements** and example notebooks
-- **Performance optimizations**
-- **Bug fixes and testing**
+1. Fork the repository
+2. Create branch from **Contribute branch**
+3. Make changes following guidelines
+4. Submit PR to **Contribute branch ONLY**
+5. Code review and approval
+6. Merge to main upon approval
 
-#### **Specific Help Needed:**
-- **GPU Validation**: Test YFormers and core layers on GPU hardware
-- **Architecture Extensions**: Add Vision Transformers, sparse attention to YFormers
-- **Performance Benchmarking**: Compare against PyTorch implementations
-- **Documentation**: Tutorial notebooks and educational content
+## Roadmap
 
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+### 2026 (Current Year)
+- ✅ YFormers production-ready
+- ✅ Checkpoint management
+- ✅ DataLoader implementation
+- ✅ GPU testing and validation
+- 🔄 Advanced optimizers (Lion, Sophia)
+- 🔄 Learning rate scheduling improvements
+- 🔄 Model quantization for inference
 
-## Future Plans
+### 2027
+- C++ core implementation for performance
+- CUDA kernel optimization
+- Production deployment utilities
+- Distributed training support
+- Model serving infrastructure
 
-- **GPU Testing and Optimization**: Comprehensive testing and optimization on GPU hardware for both core layers and YFormers
-- **Extended Architecture Library**: YLSTM, YQuence, BiYQuence implementations
-- **Training Utilities**: Data loaders, augmentation, and training loops
-- **Advanced YFormers Features**: Vision transformers, sparse attention mechanisms within the unified YFormers architecture
-- **Model Zoo**: Pre-trained transformer models and architectures
+### 2028
+- Full production ecosystem
+- Pre-trained model zoo
+- Enterprise deployment tools
+
+## Why YFlow?
+
+**Independence**: No reliance on corporate-owned frameworks means no vendor lock-in, no sudden API changes, and complete control over your ML infrastructure.
+
+**Transparency**: Every component is implemented from scratch, making the entire framework understandable and modifiable.
+
+**NLP-First**: Specialized for natural language processing with battle-tested transformer implementations.
+
+**Production-Ready**: Not just educational - YFormers and core components are validated on real workloads.
+
+**Community-Governed**: Open development with clear architectural principles to prevent fragmentation.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
+## Acknowledgments
 
-YFlow was created as an educational project to deeply understand deep learning frameworks and their implementation details. YFormers extends this educational mission to transformer architectures, providing a complete implementation of modern attention-based models. The project is not intended for production use but rather as a learning tool and research platform.
+YFlow was created to demonstrate that high-quality, production-ready deep learning frameworks can exist outside corporate control. The project prioritizes independence, transparency, and community governance.
+
+Special thanks to all contributors who believe in corporate-free, open-source AI infrastructure.
 
 ## Version
 
-Current version: 0.2.0 (with YFormers integration and unified governance model)
+**Current Version**: 0.3.0
+
+**What's New in 0.3.0:**
+- ✅ Production-tested YFormers (all three architectures)
+- ✅ Full checkpoint management system
+- ✅ DataLoader with efficient batching
+- ✅ GPU validation and testing complete
+- ✅ Improved documentation and examples
+
+---
+
+**Questions?** Open an issue on GitHub.
+
+**Want to contribute?** Read [CONTRIBUTING.md](CONTRIBUTING.md) and start with issues tagged `good-first-issue`.
