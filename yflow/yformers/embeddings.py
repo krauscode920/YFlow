@@ -117,34 +117,38 @@ class TokenEmbedding(Layer):
         # Initialize weight gradients
         self.dweight = xp.zeros_like(self.weight)
 
-        # Accumulate gradients for each token index
+        # BUGFIX (performance): the original implementation used a nested
+        # Python for-loop over every (batch, seq) position - fine for
+        # small datasets (tens of examples) but becomes a severe
+        # bottleneck at real scale (hundreds of examples): ~10,000+ raw
+        # Python iterations per backward call, causing training to take
+        # minutes per epoch instead of seconds once dataset size grew.
+        # Replaced with a fully vectorized scatter-add via xp.add.at,
+        # which handles duplicate token indices correctly (unlike plain
+        # fancy-index assignment, which would silently drop gradient
+        # contributions when the same token appears more than once in
+        # a batch).
         if self.input.ndim == 1:
-            # For 1D inputs
-            for i, idx in enumerate(self.input):
-                idx = int(idx)  # Ensure scalar
-                if self.padding_idx is not None and idx == self.padding_idx:
-                    continue
-                # Explicitly get the embedding vector
-                grad_vec = output_gradient[0, i, :]  # Shape: (embed_dim,)
-                self.dweight[idx] += grad_vec
+            flat_input = self.input
+            flat_grad = output_gradient[0]  # (seq_len, embed_dim)
         else:
-            # For batch inputs
             batch_size, seq_len = self.input.shape
             grad_batch_size = output_gradient.shape[0]
             grad_seq_len = output_gradient.shape[1]
-
-            # Use the minimum of both to avoid index errors
             actual_batch = min(batch_size, grad_batch_size)
             actual_seq = min(seq_len, grad_seq_len)
 
-            for b in range(actual_batch):
-                for s in range(actual_seq):
-                    idx = int(self.input[b, s])  # Ensure scalar index
-                    if self.padding_idx is not None and idx == self.padding_idx:
-                        continue
-                    # Explicitly index to get (embed_dim,) vector
-                    grad_vec = output_gradient[b, s, :]  # Shape: (embed_dim,)
-                    self.dweight[idx] += grad_vec
+            flat_input = self.input[:actual_batch, :actual_seq].reshape(-1)
+            flat_grad = output_gradient[:actual_batch, :actual_seq, :].reshape(-1, output_gradient.shape[-1])
+
+        flat_input = xp.asarray(flat_input).astype(xp.int64)
+
+        if self.padding_idx is not None:
+            keep_mask = flat_input != self.padding_idx
+            flat_input = flat_input[keep_mask]
+            flat_grad = flat_grad[keep_mask]
+
+        xp.add.at(self.dweight, flat_input, flat_grad)
 
         return None
 
@@ -361,17 +365,17 @@ class LearnedPositionalEmbedding(Layer):
         # Initialize weight gradients
         self.dweight = xp.zeros_like(self.weight)
 
-        # Now accumulate gradients for positions
-        # output_gradient shape: (batch_size, seq_len, embed_dim)
+        # BUGFIX (performance): replaced the original per-position Python
+        # loop with a vectorized sum. The original loop was only O(seq_len)
+        # (not O(batch*seq)) so it wasn't the primary bottleneck, but this
+        # form avoids repeated Python-level xp.sum calls and is consistent
+        # with the TokenEmbedding fix above.
         batch_size = output_gradient.shape[0]
         actual_seq_len = min(output_gradient.shape[1], self.seq_len)
 
-        for pos in range(actual_seq_len):
-            # Get gradient for this position across all batches
-            pos_grad = output_gradient[:, pos, :]  # Shape: (batch_size, embed_dim)
-            # Sum over batch dimension to get (embed_dim,) and accumulate
-            grad_sum = xp.sum(pos_grad, axis=0)  # Shape: (embed_dim,)
-            self.dweight[self.start_pos + pos] += grad_sum
+        # Sum over the batch axis for each position in one vectorized call
+        pos_grad_sum = xp.sum(output_gradient[:, :actual_seq_len, :], axis=0)  # (actual_seq_len, embed_dim)
+        self.dweight[self.start_pos:self.start_pos + actual_seq_len] += pos_grad_sum
 
         return output_gradient
 

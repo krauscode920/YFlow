@@ -39,6 +39,47 @@ class TransformerBase(Model):
         super().__init__(seed=seed)
         self.training = True
 
+    def set_training(self, mode: bool):
+        """
+        Recursively set training mode on this model AND every sub-layer.
+
+        BUGFIX: TransformerBase inherits from Model, not Layer, so it
+        never had the recursive train/eval propagation Layer subclasses
+        got. Previously self.training here was a dead flag - nothing
+        read it, nothing set it after construction, and none of the
+        submodules (embedding, encoder, decoder, classifier) ever found
+        out about it either. Combined with each submodule's OWN
+        independent, never-updated .training flag (see Layer.set_training
+        in core/layer.py), this meant dropout was ALWAYS active, even
+        during evaluation - identical weights could produce different
+        outputs on consecutive forward passes.
+
+        This walks every attribute of this model (embedding, encoder,
+        decoder, classifier, output_proj, etc.) and calls .set_training()
+        on any of them that are Layer instances, which then recurses
+        further into their own sub-layers automatically.
+
+        Call model.eval() before any evaluation/inference forward pass,
+        and model.train() before resuming training, rather than trusting
+        the default.
+        """
+        self.training = mode
+        for attr_value in vars(self).values():
+            if isinstance(attr_value, Layer):
+                attr_value.set_training(mode)
+            elif isinstance(attr_value, (list, tuple)):
+                for item in attr_value:
+                    if isinstance(item, Layer):
+                        item.set_training(mode)
+
+    def train(self):
+        """Set this model and all sub-layers to training mode (dropout active)."""
+        self.set_training(True)
+
+    def eval(self):
+        """Set this model and all sub-layers to evaluation mode (dropout disabled)."""
+        self.set_training(False)
+
     def create_padding_mask(self, x):
         """
         Create padding mask for encoder attention.

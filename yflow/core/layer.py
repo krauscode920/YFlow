@@ -49,14 +49,14 @@ class Layer:
         # FIXED: Added transformer layers to the check
         from ..layers.lstm import YSTM
         from ..layers.rnn import YQuence
-        
+
         # Check if transformer layers are available and instance check
         try:
             from ..yformers.attention import MultiHeadAttention, SelfAttention
             from ..yformers.encoder import EncoderBlock, EncoderStack, FeedForward
             from ..yformers.decoder import DecoderBlock, DecoderStack
             from ..yformers.embeddings import TokenEmbedding, PositionalEmbedding, LearnedPositionalEmbedding
-            
+
             is_transformer = isinstance(self, (
                 MultiHeadAttention, SelfAttention,
                 EncoderBlock, EncoderStack,
@@ -67,7 +67,7 @@ class Layer:
         except ImportError:
             # YFormers not available
             is_transformer = False
-        
+
         # Determine expected dimensions
         is_sequence_layer = isinstance(self, (YQuence, YSTM))
         expected_ndim = 3 if (is_sequence_layer or is_transformer) else 2
@@ -96,6 +96,41 @@ class Layer:
     def get_weights(self) -> List[Union[np.ndarray, 'cp.ndarray']]:
         """Get layer weights - override if layer has weights"""
         return []
+
+    def set_training(self, mode: bool):
+        """
+        Recursively set training mode on this layer AND every sub-layer.
+
+        BUGFIX: dropout-adjacent classes (FeedForward, EncoderBlock,
+        PositionalEmbedding, etc.) each keep their own independent
+        `self.training` flag, set once at construction and never
+        updated by anything afterward. Setting `layer.training = False`
+        on a single top-level object does nothing for the sub-layers
+        nested inside it. This method walks every attribute of this
+        layer; any attribute that is itself a Layer (or a list/tuple of
+        Layers - e.g. EncoderStack.layers) gets the same mode applied
+        recursively, so the whole tree switches together with one call.
+
+        Use .train() / .eval() below rather than setting .training
+        directly - that was the root cause of dropout firing randomly
+        even during "evaluation", since nothing ever actually flipped it.
+        """
+        self.training = mode
+        for attr_value in vars(self).values():
+            if isinstance(attr_value, Layer):
+                attr_value.set_training(mode)
+            elif isinstance(attr_value, (list, tuple)):
+                for item in attr_value:
+                    if isinstance(item, Layer):
+                        item.set_training(mode)
+
+    def train(self):
+        """Set this layer and all sub-layers to training mode (dropout active)."""
+        self.set_training(True)
+
+    def eval(self):
+        """Set this layer and all sub-layers to evaluation mode (dropout disabled)."""
+        self.set_training(False)
 
     def set_weights(self, weights: List[Union[np.ndarray, 'cp.ndarray']]):
         """Set layer weights - override if layer has weights"""

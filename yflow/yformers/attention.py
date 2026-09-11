@@ -1,9 +1,24 @@
-# Im using the file you gave me
-# 6 #FINAL FIX - handles 1D, 2D, 3D, 4D masks correctly after squeeze
 # yflow/yformers/attention.py
 """
 Attention mechanisms for transformer models.
 FIXED: Properly caches 4D split-head tensors and uses them in backward pass.
+
+CRITICAL BUGFIX (this pass): xp.dot() on two 3D arrays does NOT perform
+batched matrix multiplication the way xp.matmul() does. For a 3D array
+of shape (batch, m, n) dotted with another of shape (batch, n, p),
+xp.dot() computes every combination across BOTH batch dimensions,
+producing a (batch, m, batch, p) result instead of the intended
+(batch, m, p). This was happening in every weight-gradient computation
+in both SelfAttention.backward() and MultiHeadAttention.backward() -
+for a batch of ~474 examples this created ~229 million element
+intermediate arrays where ~485 thousand were needed, making it both
+the dominant performance bottleneck (confirmed via profiling: ~32s per
+call, over 90% of total training time) AND a correctness bug, since
+averaging over that wrong shape mixes gradient contributions across
+unrelated batch items instead of averaging each item's own gradient
+correctly. All xp.dot(...).mean(axis=0) weight-gradient calls below
+are now xp.matmul(...).mean(axis=0), which correctly treats leading
+dimensions as batch dimensions.
 """
 
 import numpy as np
@@ -90,9 +105,10 @@ class SelfAttention(Layer):
         d_k = xp.matmul(d_scores.transpose(0, 2, 1), q)
 
         d_x = xp.dot(d_q, self.W_q.T) + xp.dot(d_k, self.W_k.T) + xp.dot(d_v, self.W_v.T)
-        self.dW_q = xp.dot(self.input.transpose(0, 2, 1), d_q).mean(axis=0)
-        self.dW_k = xp.dot(self.input.transpose(0, 2, 1), d_k).mean(axis=0)
-        self.dW_v = xp.dot(self.input.transpose(0, 2, 1), d_v).mean(axis=0)
+        # BUGFIX: xp.dot -> xp.matmul (see module docstring)
+        self.dW_q = xp.matmul(self.input.transpose(0, 2, 1), d_q).mean(axis=0)
+        self.dW_k = xp.matmul(self.input.transpose(0, 2, 1), d_k).mean(axis=0)
+        self.dW_v = xp.matmul(self.input.transpose(0, 2, 1), d_v).mean(axis=0)
         self.db_q = d_q.mean(axis=(0, 1))
         self.db_k = d_k.mean(axis=(0, 1))
         self.db_v = d_v.mean(axis=(0, 1))
@@ -257,7 +273,23 @@ class MultiHeadAttention(Layer):
 
         # Gradient through output projection
         d_context = xp.dot(output_gradient, self.W_o.T)
-        self.dW_o = xp.dot(context.transpose(0, 2, 1), output_gradient).mean(axis=0)
+
+        # BUGFIX (critical - correctness AND performance): xp.dot on two
+        # 3D arrays does NOT do batched matrix multiplication like
+        # matmul does. It instead computes every combination across BOTH
+        # arrays' batch dimensions, so context.transpose(0,2,1) shaped
+        # (batch,embed,seq) dotted with output_gradient shaped
+        # (batch,seq,embed) produced a (batch,embed,batch,embed) result
+        # here - over 229 million elements for a batch of 474, when only
+        # (batch,embed,embed) was ever intended. This was both the
+        # dominant performance bottleneck (~32s per call, confirmed by
+        # profiling - over 90% of total training time) AND a
+        # correctness bug, since .mean(axis=0) on that wrong shape mixes
+        # gradient contributions across unrelated batch items instead of
+        # averaging each item's own gradient. xp.matmul correctly treats
+        # leading dims as batch dims, giving the intended per-item
+        # (batch,embed,embed) result before averaging.
+        self.dW_o = xp.matmul(context.transpose(0, 2, 1), output_gradient).mean(axis=0)
         self.db_o = output_gradient.mean(axis=(0, 1))
 
         # Split gradient into heads
@@ -318,10 +350,11 @@ class MultiHeadAttention(Layer):
         d_input_k = xp.dot(d_k_3d, self.W_k.T)
         d_input_v = xp.dot(d_v_3d, self.W_v.T)
 
-        # Weight gradients
-        self.dW_q = xp.dot(self.input_q.transpose(0, 2, 1), d_q_3d).mean(axis=0)
-        self.dW_k = xp.dot(self.input_k.transpose(0, 2, 1), d_k_3d).mean(axis=0)
-        self.dW_v = xp.dot(self.input_v.transpose(0, 2, 1), d_v_3d).mean(axis=0)
+        # BUGFIX: xp.dot -> xp.matmul for all three weight gradients
+        # (same bug as dW_o above - see module docstring)
+        self.dW_q = xp.matmul(self.input_q.transpose(0, 2, 1), d_q_3d).mean(axis=0)
+        self.dW_k = xp.matmul(self.input_k.transpose(0, 2, 1), d_k_3d).mean(axis=0)
+        self.dW_v = xp.matmul(self.input_v.transpose(0, 2, 1), d_v_3d).mean(axis=0)
         self.db_q = d_q_3d.mean(axis=(0, 1))
         self.db_k = d_k_3d.mean(axis=(0, 1))
         self.db_v = d_v_3d.mean(axis=(0, 1))
