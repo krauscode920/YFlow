@@ -208,7 +208,31 @@ class MultiHeadAttention(Layer):
         return e_x / xp.sum(e_x, axis=axis, keepdims=True)
 
     def forward(self, q, k=None, v=None, mask=None):
-        """Forward pass - caches 4D split tensors."""
+        """Forward pass - caches 4D split tensors.
+
+        BUGFIX (critical, affects every checkpoint trained tonight):
+        is_self_attention used to be determined in backward() via
+        `self.input_q is self.input_k` (Python object identity). But
+        q, k, v each get passed through self.device.to_device()
+        SEPARATELY below - if that ever returns a new array rather
+        than the exact same object (e.g. any internal copy/cast), then
+        even though `k = q` two lines earlier made them the same
+        object, after to_device() they can become two DIFFERENT
+        objects with IDENTICAL content. The identity check then wrongly
+        evaluates False, so backward() returned a 3-tuple
+        (d_input_q, d_input_k, d_input_v) instead of the correct single
+        summed array. That tuple then got used directly as the gradient
+        fed into ln1.backward() - `.shape` on a tuple doesn't work the
+        way it does on an array, and the actual failure mode was worse:
+        implicit numpy broadcasting elsewhere silently absorbed the
+        wrong structure instead of erroring, corrupting ln1's saved
+        gamma/beta to the wrong shape. Fixed by capturing the true
+        self-attention intent HERE, before any device conversion can
+        break identity, and storing it explicitly instead of
+        re-deriving it unreliably later.
+        """
+        is_self_attention = k is None and v is None
+
         if k is None:
             k = q
         if v is None:
@@ -222,6 +246,7 @@ class MultiHeadAttention(Layer):
         self.input_q = q
         self.input_k = k
         self.input_v = v
+        self.is_self_attention = is_self_attention
         batch_size = q.shape[0]
 
         # Linear projections (3D)
@@ -359,7 +384,7 @@ class MultiHeadAttention(Layer):
         self.db_k = d_k_3d.mean(axis=(0, 1))
         self.db_v = d_v_3d.mean(axis=(0, 1))
 
-        is_self_attention = (self.input_q is self.input_k) and (self.input_k is self.input_v)
+        is_self_attention = self.is_self_attention  # captured in forward(), NOT re-derived via identity here (see forward()'s docstring for why that was unreliable)
         if is_self_attention:
             return d_input_q + d_input_k + d_input_v
         else:

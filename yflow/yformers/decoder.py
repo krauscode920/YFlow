@@ -4,6 +4,24 @@ Decoder components for transformer models.
 
 This module implements the decoder blocks and stacks used in transformer architectures.
 All implementations leverage YFlow's device abstraction for seamless CPU/GPU support.
+
+BUGFIX: DecoderBlock.forward() passes `encoder_output` as BOTH the key
+and value arguments to cross-attention:
+    self.cross_attn.forward(norm2, encoder_output, encoder_output, ...)
+MultiHeadAttention.backward() correctly computes separate gradients for
+the key path and the value path (d_input_k, d_input_v) and returns both.
+DecoderBlock.backward() previously kept only d_input_k and silently
+DROPPED d_input_v entirely:
+    encoder_output_grad = cross_attn_result[1]   # only the key gradient
+Since encoder_output is fed through TWO separate paths (as both key and
+value), the correct gradient flowing back to the encoder is the SUM of
+both paths' contributions, not just one. This silently under-trained
+the encoder in any full encoder-decoder (TransformerModel) run. This
+does NOT affect EncoderOnlyModel or DecoderOnlyModel, which never use
+DecoderBlock/cross-attention at all - it only matters for true
+sequence-to-sequence training (e.g. translation, summarization).
+Fixed in both the pre-norm and post-norm branches of
+DecoderBlock.backward() below.
 """
 
 import numpy as np
@@ -217,10 +235,14 @@ class DecoderBlock(Layer):
 
             # Backpropagate through cross-attention
             cross_attn_result = self.cross_attn.backward(cross_attn_grad)
-            # Cross-attention returns (q_grad, k_grad, v_grad) as tuple
+            # Cross-attention returns (q_grad, k_grad, v_grad) as tuple.
+            # BUGFIX: encoder_output was passed as BOTH key and value in
+            # forward(), so its true gradient is the SUM of both paths -
+            # k_grad (cross_attn_result[1]) and v_grad (cross_attn_result[2]).
+            # Previously only k_grad was kept, silently dropping v_grad.
             if isinstance(cross_attn_result, tuple):
                 norm2_grad = cross_attn_result[0]  # Gradient for query (decoder input)
-                encoder_output_grad = cross_attn_result[1]  # Gradient for key/value (encoder output)
+                encoder_output_grad = cross_attn_result[1] + cross_attn_result[2]  # key + value paths
             else:
                 # Should not happen for cross-attention, but handle gracefully
                 norm2_grad = cross_attn_result
@@ -281,10 +303,12 @@ class DecoderBlock(Layer):
 
             # Backpropagate through cross-attention
             cross_attn_result = self.cross_attn.backward(cross_attn_grad)
-            # Cross-attention returns (q_grad, k_grad, v_grad) as tuple
+            # Cross-attention returns (q_grad, k_grad, v_grad) as tuple.
+            # BUGFIX: same as pre-norm branch above - sum k_grad + v_grad
+            # since encoder_output was fed as both key and value.
             if isinstance(cross_attn_result, tuple):
                 x1_grad2 = cross_attn_result[0]  # Gradient for query (decoder input)
-                encoder_output_grad = cross_attn_result[1]  # Gradient for key/value (encoder output)
+                encoder_output_grad = cross_attn_result[1] + cross_attn_result[2]  # key + value paths
             else:
                 # Should not happen for cross-attention, but handle gracefully
                 x1_grad2 = cross_attn_result
